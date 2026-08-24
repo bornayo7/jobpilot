@@ -1,0 +1,152 @@
+body {
+  font-size: 14px;
+}
+
+.options {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 24px 20px 80px;
+}
+
+.options-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.options-header h1 {
+  font-size: 20px;
+  margin: 0;
+}
+
+.options-header .actions {
+  display: flex;
+  gap: 8px;
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: var(--bg);
+}
+
+.card h2 {
+  font-size: 15px;
+  margin: 0 0 4px;
+}
+
+.card .hint {
+  color: var(--text-soft);
+  font-size: 12.5px;
+  margin: 0 0 12px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px 14px;
+}
+
+.field {
+  display: block;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.field input,
+.field select,
+.field textarea {
+  display: block;
+  width: 100%;
+  margin-top: 3px;
+  padding: 7px 9px;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 70px;
+}
+
+.field.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.field.checkbox input {
+  width: auto;
+  margin: 0;
+}
+
+.entry {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: var(--bg-soft);
+}
+
+.entry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.entry-header .title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.entry-remove {
+  color: var(--fail);
+  border-color: transparent;
+  background: transparent;
+  padding: 2px 8px;
+}
+
+.add-row {
+  margin-top: 4px;
+}
+
+.save-float {
+  position: fixed;
+  bottom: 18px;
+  right: 24px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12);
+}
+
+.save-float .status {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.sensitive-note {
+  font-size: 12px;
+  color: var(--warn);
+  margin: 0 0 10px;
+}
