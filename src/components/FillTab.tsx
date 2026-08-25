@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { browser } from '#imports';
 import type { PanelState } from '@hooks/useBackgroundPort';
 import { useFillPlan, type FramePlan } from '@hooks/useFillPlan';
@@ -7,26 +7,72 @@ import { ALL_FIELD_KINDS, type FieldKind } from '@lib/schema/fieldKind';
 import type { FillInstruction, PanelToBg, SerializedFile } from '@lib/messaging/protocol';
 import type { ReviewRow } from '@lib/fill/resolver';
 import { loadDocumentAsFile } from '@lib/storage/documents';
+import { checkDealbreakers, type DealbreakerWarning } from '@lib/memory/dealbreakers';
+import { listAnswers, rankAnswers, type AnswerRecord } from '@lib/memory/answers';
+import { companyFromUrl } from '@lib/tracker/detect';
+import { findPreviousApplications, listJobs, type TrackerJob } from '@lib/tracker/store';
 
 interface Actions {
   send(msg: PanelToBg): void;
   scan(tabId: number): void;
   execute(tabId: number, frameId: number, instructions: FillInstruction[], files?: SerializedFile[]): void;
   highlight(tabId: number, frameId: number, fieldId: string): void;
+  extractJd(tabId: number): void;
 }
 
 export function FillTab({ state, actions }: { state: PanelState; actions: Actions }) {
-  const { profile, resume, plans, toggleInclude, editValue, editKind } = useFillPlan(state);
+  const { profile, settings, resume, plans, toggleInclude, editValue, editKind } = useFillPlan(state);
   const [filling, setFilling] = useState(false);
   const [enableHint, setEnableHint] = useState('');
+  const [answerBank, setAnswerBank] = useState<AnswerRecord[]>([]);
+  const [previousApps, setPreviousApps] = useState<TrackerJob[]>([]);
+  const jdRequestedFor = useRef<number | null>(null);
 
   const { tabId, frames } = state;
   const frameEntries = [...frames.entries()].sort(([a], [b]) => a - b);
   const detected = frameEntries.find(([, f]) => f.atsId !== null)?.[1].atsId ?? null;
 
+  useEffect(() => {
+    void listAnswers().then(setAnswerBank);
+  }, []);
+
+  // Auto-extract the JD once per tab: powers dealbreaker warnings here and
+  // pre-fills the Generate tab's scan step.
+  useEffect(() => {
+    if (tabId === null || state.jd !== null || frameEntries.length === 0) return;
+    if (jdRequestedFor.current === tabId) return;
+    jdRequestedFor.current = tabId;
+    actions.extractJd(tabId);
+  }, [tabId, state.jd, frameEntries.length, actions]);
+
+  // Duplicate-application guard: have you applied to this company before?
+  useEffect(() => {
+    const { company } = companyFromUrl(state.tabUrl);
+    if (!company) {
+      setPreviousApps([]);
+      return;
+    }
+    void listJobs().then((jobs) => setPreviousApps(findPreviousApplications(jobs, company)));
+  }, [state.tabUrl]);
+
+  // Right-click "fix this field" → scroll the matching row into view.
+  useEffect(() => {
+    if (!state.focusField) return;
+    const el = document.getElementById(`row-${state.focusField.fieldId}`);
+    if (el) {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      el.classList.add('flash');
+      const timer = setTimeout(() => el.classList.remove('flash'), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [state.focusField]);
+
   if (tabId === null) {
     return <div className="placeholder"><p>No active tab.</p></div>;
   }
+
+  const dealbreakers: DealbreakerWarning[] =
+    state.jd && settings ? checkDealbreakers(state.jd.text, settings) : [];
 
   const profileReady = !!profile && (!!profile.basics.email || !!profile.basics.firstName);
   const includedCount = [...plans.values()].reduce(
@@ -85,6 +131,25 @@ export function FillTab({ state, actions }: { state: PanelState; actions: Action
 
       {state.tabUrl && <div className="url" title={state.tabUrl}>{state.tabUrl}</div>}
 
+      {previousApps.length > 0 && (
+        <div className="warn-box">
+          You already applied to {previousApps[0]!.company} on{' '}
+          {new Date(previousApps[0]!.createdAt).toLocaleDateString()}
+          {previousApps[0]!.title ? ` (${previousApps[0]!.title})` : ''}
+          {previousApps.length > 1 ? ` — and ${previousApps.length - 1} more time(s)` : ''}. Check the
+          Tracker tab before re-applying.
+        </div>
+      )}
+
+      {dealbreakers.map((warning) => (
+        <div className="warn-box" key={warning.id}>
+          <div>
+            <strong>⚠ {warning.message}.</strong>
+            {warning.excerpt && <div className="hint">“{warning.excerpt}”</div>}
+          </div>
+        </div>
+      ))}
+
       {frameEntries.length === 0 && (
         <div className="enable-site">
           <p className="hint">
@@ -122,6 +187,7 @@ export function FillTab({ state, actions }: { state: PanelState; actions: Action
             frameLabel={frameEntries.length > 1 ? `frame ${frameId}${frame.atsId ? ` · ${ATS_LABELS[frame.atsId]}` : ''}` : null}
             plan={plan}
             fillResults={state.fillResults}
+            answerBank={answerBank}
             onHover={(fieldId) => actions.highlight(tabId, frameId, fieldId)}
             onToggle={(fieldId) => toggleInclude(frameId, fieldId)}
             onValue={(fieldId, text) => editValue(frameId, fieldId, text)}
@@ -165,6 +231,7 @@ function FramePlanView({
   frameLabel,
   plan,
   fillResults,
+  answerBank,
   onHover,
   onToggle,
   onValue,
@@ -174,6 +241,7 @@ function FramePlanView({
   frameLabel: string | null;
   plan: FramePlan;
   fillResults: PanelState['fillResults'];
+  answerBank: AnswerRecord[];
   onHover: (fieldId: string) => void;
   onToggle: (fieldId: string) => void;
   onValue: (fieldId: string, text: string) => void;
@@ -182,16 +250,25 @@ function FramePlanView({
   const autoRows = plan.rows.filter((row) => !row.requiresReview);
   const reviewRows = plan.rows.filter((row) => row.requiresReview);
 
+  const renderRow = (row: ReviewRow) => (
+    <RowView
+      key={row.field.fieldId}
+      row={row}
+      result={fillResults.get(row.field.fieldId)}
+      answerBank={answerBank}
+      onHover={onHover}
+      onToggle={onToggle}
+      onValue={onValue}
+      onKind={onKind}
+    />
+  );
+
   return (
     <Fragment key={frameId}>
       {frameLabel && <div className="frame-header">{frameLabel}</div>}
-      {autoRows.map((row) => (
-        <RowView key={row.field.fieldId} row={row} result={fillResults.get(row.field.fieldId)} onHover={onHover} onToggle={onToggle} onValue={onValue} onKind={onKind} />
-      ))}
+      {autoRows.map(renderRow)}
       {reviewRows.length > 0 && <div className="frame-header">Needs your review</div>}
-      {reviewRows.map((row) => (
-        <RowView key={row.field.fieldId} row={row} result={fillResults.get(row.field.fieldId)} onHover={onHover} onToggle={onToggle} onValue={onValue} onKind={onKind} />
-      ))}
+      {reviewRows.map(renderRow)}
       {plan.unmatched.length > 0 && (
         <>
           <div className="frame-header">Unrecognized (fill by hand)</div>
@@ -214,6 +291,7 @@ function FramePlanView({
 function RowView({
   row,
   result,
+  answerBank,
   onHover,
   onToggle,
   onValue,
@@ -221,6 +299,7 @@ function RowView({
 }: {
   row: ReviewRow;
   result?: { ok: boolean; error?: string };
+  answerBank: AnswerRecord[];
   onHover: (fieldId: string) => void;
   onToggle: (fieldId: string) => void;
   onValue: (fieldId: string, text: string) => void;
@@ -229,9 +308,14 @@ function RowView({
   const fieldId = row.field.fieldId;
   const valueText = instructionDisplay(row);
   const fillable = row.instruction !== null;
+  const isQuestion = row.kind === 'question.freeText' || row.kind === 'question.choice';
+  const suggestions = isQuestion
+    ? rankAnswers(row.field.label || row.field.ariaLabel || '', answerBank, '')
+    : [];
 
   return (
     <div
+      id={`row-${fieldId}`}
       className={`review-row${row.sensitive ? ' sensitive' : ''}${row.include ? '' : ' excluded'}`}
       onMouseEnter={() => onHover(fieldId)}
     >
@@ -276,6 +360,14 @@ function RowView({
               </option>
             ))}
           </select>
+        ) : isQuestion ? (
+          <textarea
+            className="paste-area"
+            rows={2}
+            value={valueText}
+            placeholder="(type an answer, or use a saved one below)"
+            onChange={(e) => onValue(fieldId, e.target.value)}
+          />
         ) : (
           <input
             value={valueText}
@@ -291,6 +383,20 @@ function RowView({
           ))}
         </select>
       </div>
+      {suggestions.length > 0 && (
+        <div className="suggestion-row">
+          {suggestions.map(({ record, score }) => (
+            <button
+              key={record.id}
+              className="suggestion"
+              title={record.answer}
+              onClick={() => onValue(fieldId, record.answer)}
+            >
+              ↳ {Math.round(score * 100)}% · {record.company || 'saved'} · {record.answer.slice(0, 44)}…
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

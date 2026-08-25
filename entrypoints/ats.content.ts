@@ -2,13 +2,16 @@ import { browser } from '#imports';
 import type { Browser } from 'wxt/browser';
 import { CS_PORT, type BgToCs, type CsToBg } from '@lib/messaging/protocol';
 import { detectAts } from '@lib/fill/adapters/detect';
-import { discoverFields, observeFields, findByFieldId } from '@lib/fill/discovery';
+import { discoverFields, observeFields, findByFieldId, FIELD_ID_ATTR } from '@lib/fill/discovery';
 import { executeInstructions } from '@lib/fill/executor';
+import { captureAnswers } from '@lib/fill/captureAnswers';
+import { looksLikeConfirmation, looksLikeSubmitButton } from '@lib/tracker/detect';
 
 /**
  * The only code that touches job-site DOMs. Deliberately dumb: report field
- * descriptors, execute fill instructions, extract JD text. It never sees the
- * profile, API keys, or any model — those live in the side panel.
+ * descriptors, execute fill instructions, extract JD text, snapshot answers at
+ * submit time. It never sees the profile, keys, or any model — those live in
+ * the side panel.
  */
 export default defineContentScript({
   matches: [
@@ -32,6 +35,8 @@ export default defineContentScript({
     const atsId = detectAts(location.host, location.pathname);
     let port: Browser.runtime.Port | null = null;
     let stopObserving: (() => void) | null = null;
+    let confirmationSent = false;
+    let lastContextTarget: Element | null = null;
 
     const post = (msg: CsToBg) => {
       try {
@@ -41,9 +46,24 @@ export default defineContentScript({
       }
     };
 
+    const checkConfirmation = () => {
+      if (confirmationSent) return;
+      const bodyText = document.body?.innerText ?? '';
+      if (looksLikeConfirmation(location.href, bodyText)) {
+        confirmationSent = true;
+        post({
+          t: 'cs/submitDetected',
+          url: location.href,
+          title: document.title,
+          confirmationText: bodyText.slice(0, 300),
+        });
+      }
+    };
+
     const scanAndReport = () => {
       const fields = discoverFields(atsId);
       post({ t: 'cs/fields', fields });
+      checkConfirmation();
     };
 
     const handleMessage = async (raw: unknown) => {
@@ -74,6 +94,17 @@ export default defineContentScript({
           }
           break;
         }
+        case 'bg/identifyContext': {
+          const target = lastContextTarget;
+          if (!target) break;
+          const stamped =
+            target.closest<HTMLElement>(`[${FIELD_ID_ATTR}]`) ??
+            target.closest('label, li, fieldset, div')?.querySelector<HTMLElement>(`[${FIELD_ID_ATTR}]`) ??
+            null;
+          const fieldId = stamped?.getAttribute(FIELD_ID_ATTR);
+          if (fieldId) post({ t: 'cs/contextField', fieldId });
+          break;
+        }
         case 'bg/extractJd': {
           const main = document.querySelector<HTMLElement>('main, [role="main"], article');
           const text = (main ?? document.body)?.innerText ?? '';
@@ -85,6 +116,43 @@ export default defineContentScript({
           break;
       }
     };
+
+    // Snapshot answers the moment a submit-looking control is activated — the
+    // form is unreachable once navigation starts.
+    document.addEventListener(
+      'click',
+      (event) => {
+        const target = event.target as Element | null;
+        const control = target?.closest<HTMLElement>('button, input[type="submit"], [role="button"]');
+        if (!control) return;
+        const text =
+          control.textContent?.trim() ||
+          (control as HTMLInputElement).value?.trim?.() ||
+          control.getAttribute('aria-label') ||
+          '';
+        if (!looksLikeSubmitButton(text)) return;
+        post({
+          t: 'cs/submitAttempt',
+          url: location.href,
+          title: document.title,
+          answers: captureAnswers(),
+        });
+        // Confirmation may render without a DOM burst; check again shortly.
+        setTimeout(checkConfirmation, 2500);
+        setTimeout(checkConfirmation, 6000);
+      },
+      true,
+    );
+
+    // Track what the user right-clicked so "fix this field's mapping" can
+    // resolve it — Chrome's context-menu API never identifies the element.
+    document.addEventListener(
+      'contextmenu',
+      (event) => {
+        lastContextTarget = event.target as Element | null;
+      },
+      true,
+    );
 
     const connect = () => {
       port = browser.runtime.connect({ name: CS_PORT });

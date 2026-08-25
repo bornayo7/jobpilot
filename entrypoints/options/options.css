@@ -145,6 +145,22 @@ body {
   font-size: 12px;
 }
 
+.profile-switcher {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.profile-switcher select {
+  font: inherit;
+  padding: 6px 8px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-width: 180px;
+}
+
 .sensitive-note {
   font-size: 12px;
   color: var(--warn);

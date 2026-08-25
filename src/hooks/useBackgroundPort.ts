@@ -26,6 +26,8 @@ export interface PanelState {
   /** fieldId -> latest fill result. */
   fillResults: Map<string, FillResult>;
   jd: { title: string; text: string } | null;
+  /** Set by the right-click "fix this field" flow — FillTab scrolls to it. */
+  focusField: { frameId: number; fieldId: string; at: number } | null;
 }
 
 const emptyState = (): PanelState => ({
@@ -34,6 +36,7 @@ const emptyState = (): PanelState => ({
   frames: new Map(),
   fillResults: new Map(),
   jd: null,
+  focusField: null,
 });
 
 /**
@@ -140,9 +143,12 @@ function reduce(prev: PanelState, msg: BgToPanel): PanelState {
           if (prev.jd && prev.jd.text.length >= event.text.length) return prev;
           return { ...prev, jd: { title: event.title, text: event.text } };
         }
+        case 'cs/contextField':
+          return { ...prev, focusField: { frameId: msg.frameId, fieldId: event.fieldId, at: Date.now() } };
         case 'cs/wizardStep':
+        case 'cs/submitAttempt':
         case 'cs/submitDetected':
-          return prev; // Tracker milestone consumes these.
+          return prev; // Background consumes these (tracker + answers bank).
       }
       return prev;
     }

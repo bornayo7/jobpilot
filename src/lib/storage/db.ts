@@ -51,6 +51,7 @@ export interface JobpilotDB extends DBSchema {
       url: string;
       status: 'applied' | 'interviewing' | 'offer' | 'rejected' | 'saved';
       resumeVersionId?: string;
+      resumeName?: string;
       notes: string;
       appliedAt?: number;
       followUpAt?: number;
