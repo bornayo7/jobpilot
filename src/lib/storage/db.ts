@@ -15,10 +15,11 @@ export interface JobpilotDB extends DBSchema {
     key: string;
     value: {
       id: string;
+      kind: 'resume' | 'coverLetter';
       label: string;
+      company: string;
       jobUrl?: string;
-      company?: string;
-      /** ResumeVersion JSON (schema lands in M2). Immutable once stored. */
+      /** ResumeVersion JSON or { text } for cover letters. Immutable once stored. */
       data: unknown;
       pdfBlobId?: string;
       docxBlobId?: string;

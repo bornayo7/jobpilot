@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useBackgroundPort } from '@hooks/useBackgroundPort';
 import { FillTab } from '@components/FillTab';
+import { GenerateTab } from '@components/GenerateTab';
 import { SettingsTab } from '@components/SettingsTab';
 import { PlaceholderTab } from '@components/PlaceholderTab';
 
@@ -26,12 +27,7 @@ export function App() {
       </nav>
       <main className="content">
         {tab === 'Fill' && <FillTab state={state} actions={actions} />}
-        {tab === 'Generate' && (
-          <PlaceholderTab
-            title="Prompt Studio"
-            body="Scan a posting, build a complete tailoring prompt for claude.ai / ChatGPT, paste the result back, render ATS-safe PDF + DOCX. Lands in milestone M2."
-          />
-        )}
+        {tab === 'Generate' && <GenerateTab state={state} actions={actions} />}
         {tab === 'Tracker' && (
           <PlaceholderTab
             title="Job Tracker"
