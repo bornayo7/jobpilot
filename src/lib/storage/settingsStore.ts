@@ -30,6 +30,19 @@ export const SettingsSchema = z.object({
       notes: z.string().default(''),
     })
     .default({}),
+  dealbreakers: z
+    .object({
+      enabled: z.boolean().default(true),
+      /** Warn when the posting says it cannot sponsor a visa. */
+      noSponsorship: z.boolean().default(false),
+      /** Warn on citizenship / security-clearance requirements. */
+      clearance: z.boolean().default(false),
+      /** Warn when the posted salary tops out below this (null = off). */
+      minSalary: z.number().nullable().default(null),
+      /** Custom warn-if-mentioned terms. */
+      terms: z.array(z.string()).default([]),
+    })
+    .default({}),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 

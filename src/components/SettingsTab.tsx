@@ -148,6 +148,65 @@ export function SettingsTab() {
       </section>
 
       <section>
+        <h2>Dealbreakers</h2>
+        <p className="hint">
+          Checked locally against every scanned posting — you get warned before spending time on an
+          application you'd regret.
+        </p>
+        <label className="field checkbox-line">
+          <input
+            type="checkbox"
+            checked={settings.dealbreakers.noSponsorship}
+            onChange={(e) =>
+              update({ dealbreakers: { ...settings.dealbreakers, noSponsorship: e.target.checked } })
+            }
+          />
+          Warn when the posting says it can't sponsor a visa
+        </label>
+        <label className="field checkbox-line">
+          <input
+            type="checkbox"
+            checked={settings.dealbreakers.clearance}
+            onChange={(e) =>
+              update({ dealbreakers: { ...settings.dealbreakers, clearance: e.target.checked } })
+            }
+          />
+          Warn on citizenship / security-clearance requirements
+        </label>
+        <label>
+          Minimum salary (blank = off)
+          <input
+            type="number"
+            value={settings.dealbreakers.minSalary ?? ''}
+            placeholder="e.g. 85000"
+            onChange={(e) =>
+              update({
+                dealbreakers: {
+                  ...settings.dealbreakers,
+                  minSalary: e.target.value ? Number(e.target.value) : null,
+                },
+              })
+            }
+          />
+        </label>
+        <label>
+          Custom warn-if-mentioned terms (comma-separated)
+          <input
+            value={settings.dealbreakers.terms.join(', ')}
+            placeholder="on-site only, unpaid, commission"
+            onChange={(e) =>
+              update({
+                dealbreakers: {
+                  ...settings.dealbreakers,
+                  terms: e.target.value.split(',').map((t) => t.trim()).filter(Boolean),
+                },
+              })
+            }
+          />
+        </label>
+      </section>
+
+      <section>
         <h2>Connection checks</h2>
         <div className="health-grid">
           {PROVIDER_CHOICES.map(({ value, label }) => (

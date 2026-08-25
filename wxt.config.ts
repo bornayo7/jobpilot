@@ -25,7 +25,14 @@ export default defineConfig({
       'scripting',
       'webNavigation',
       'identity',
+      'contextMenus',
     ],
+    commands: {
+      _execute_action: {
+        suggested_key: { default: 'Alt+J' },
+        description: 'Open the JobPilot side panel',
+      },
+    },
     host_permissions: [
       'https://api.anthropic.com/*',
       'https://api.openai.com/*',

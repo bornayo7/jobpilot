@@ -5,10 +5,19 @@ import {
   PANEL_PORT,
   type BgToCs,
   type BgToPanel,
+  type CapturedAnswer,
   type CsToBg,
   type PanelToBg,
 } from '@lib/messaging/protocol';
 import type { AtsId } from '@lib/fill/adapters/ids';
+import { cleanJobTitle, companyFromUrl } from '@lib/tracker/detect';
+import { createJob } from '@lib/tracker/store';
+import { saveAnswer } from '@lib/memory/answers';
+import { loadProfile } from '@lib/storage/profileStore';
+import { getDb } from '@lib/storage/db';
+
+const CONTEXT_MENU_ID = 'jobpilot-fix-field';
+const ATTEMPT_TTL_MS = 20 * 60 * 1000;
 
 type Port = Browser.runtime.Port;
 
@@ -29,6 +38,65 @@ export default defineBackground(() => {
   const csPorts = new Map<string, Port>();
   const frameMeta = new Map<string, { atsId: AtsId | null; url: string }>();
   const panelPorts = new Map<Port, number | null>(); // port -> attached tabId
+  /** Submit-attempt snapshots awaiting a confirmation page, per tab. */
+  const pendingAttempts = new Map<number, { url: string; title: string; answers: CapturedAnswer[]; at: number }>();
+
+  // Right-click → "fix this field's mapping" → panel focuses the row.
+  void browser.contextMenus
+    ?.removeAll()
+    .then(() => {
+      browser.contextMenus.create({
+        id: CONTEXT_MENU_ID,
+        title: "JobPilot: fix this field's mapping",
+        contexts: ['all'],
+      });
+    })
+    .catch((err: unknown) => console.warn('[jobpilot] context menu setup failed', err));
+
+  browser.contextMenus?.onClicked.addListener((info, tab) => {
+    if (info.menuItemId !== CONTEXT_MENU_ID || tab?.id === undefined) return;
+    // A context-menu click is a user gesture, so the panel may open.
+    void browser.sidePanel?.open({ tabId: tab.id }).catch(() => undefined);
+    sendToFrame(tab.id, info.frameId ?? 0, { t: 'bg/identifyContext' });
+  });
+
+  /** Confirmation seen: pair with the attempt, write tracker job + answers. */
+  const recordApplication = async (
+    tabId: number,
+    detected: { url: string; title: string },
+  ): Promise<void> => {
+    const attempt = pendingAttempts.get(tabId);
+    const fresh = attempt && Date.now() - attempt.at < ATTEMPT_TTL_MS ? attempt : null;
+    pendingAttempts.delete(tabId);
+
+    const sourceUrl = fresh?.url ?? detected.url;
+    const { company } = companyFromUrl(sourceUrl);
+    const title = cleanJobTitle(fresh?.title || detected.title);
+
+    let resumeName: string | undefined;
+    try {
+      const profile = await loadProfile();
+      if (profile.documents.defaultResumeId) {
+        const db = await getDb();
+        resumeName = (await db.get('blobs', profile.documents.defaultResumeId))?.name;
+      }
+    } catch {
+      // Resume attribution is best-effort.
+    }
+
+    const job = await createJob({ company, title, url: sourceUrl, resumeName }).catch(() => null);
+    if (!job) return; // duplicate within 24h, or storage failure
+
+    for (const answer of fresh?.answers ?? []) {
+      await saveAnswer({
+        questionRaw: answer.label,
+        answer: answer.value,
+        jobId: job.id,
+        company: job.company,
+        reusable: true, // hand-typed by the user — safe to resurface (review-gated)
+      }).catch(() => undefined);
+    }
+  };
 
   const sendToPanel = (port: Port, msg: BgToPanel) => {
     try {
@@ -96,6 +164,15 @@ export default defineBackground(() => {
         const msg = raw as CsToBg;
         if (msg.t === 'cs/ready') {
           frameMeta.set(key, { atsId: msg.atsId, url: msg.url });
+        } else if (msg.t === 'cs/submitAttempt') {
+          pendingAttempts.set(tabId, {
+            url: msg.url,
+            title: msg.title,
+            answers: msg.answers,
+            at: Date.now(),
+          });
+        } else if (msg.t === 'cs/submitDetected') {
+          void recordApplication(tabId, { url: msg.url, title: msg.title });
         }
         relayToPanels(tabId, frameId, msg);
       });

@@ -101,6 +101,89 @@ export function buildAnswerPrompt(
   ].join('\n');
 }
 
+export interface FollowUpJob {
+  company: string;
+  title: string;
+  url: string;
+  appliedAt?: number;
+}
+
+export function buildFollowUpPrompt(
+  profile: Profile,
+  job: FollowUpJob,
+  style: StylePrefs,
+  variant: 'followUp' | 'thankYou',
+): string {
+  const appliedLine = job.appliedAt
+    ? `Applied on: ${new Date(job.appliedAt).toDateString()}`
+    : 'Applied recently.';
+  const task =
+    variant === 'followUp'
+      ? 'Write a short follow-up email to the recruiting team about an application that has had no response yet. Goal: polite signal of continued interest plus one concrete reason the fit is real. 90-130 words.'
+      : 'Write a short thank-you email to send after an interview for this role. Reference the role specifically; one line may mention looking forward to next steps. 80-120 words.';
+
+  return [
+    task,
+    '',
+    '== APPLICATION ==',
+    `Company: ${job.company}`,
+    `Role: ${job.title}`,
+    `Posting: ${job.url}`,
+    appliedLine,
+    '',
+    '== CANDIDATE (the only source of truth — never invent facts) ==',
+    JSON.stringify(profileForPrompt(profile), null, 2),
+    '',
+    `== STYLE ==`,
+    `Tone: ${style.tone}.${style.notes ? ` Notes: ${style.notes}` : ''}`,
+    '',
+    HUMANIZE_STYLE_GUIDE,
+    '',
+    '== OUTPUT FORMAT (strict) ==',
+    'Reply with ONLY the email: first line "Subject: ...", blank line, then the body, ending with the candidate\'s actual name. No commentary, no placeholders.',
+  ].join('\n');
+}
+
+export const PROFILE_JSON_SPEC = `{
+  "basics": { "firstName": "...", "lastName": "...", "email": "...", "phone": "...",
+    "location": { "city": "...", "state": "...", "country": "...", "postal": "..." } },
+  "links": { "linkedin": "", "github": "", "portfolio": "", "other": [] },
+  "work": [
+    { "company": "...", "title": "...", "location": "...", "start": "Jun 2024", "end": "Aug 2026",
+      "current": false, "bullets": [ { "text": "achievement bullet", "tags": ["react", "testing"] } ] }
+  ],
+  "education": [
+    { "school": "...", "degree": "B.S.", "field": "Computer Science", "gpa": "3.8",
+      "start": "Aug 2023", "end": "May 2027" }
+  ],
+  "projects": [
+    { "name": "...", "url": "", "description": "one line", "bullets": [ { "text": "...", "tags": [] } ] }
+  ],
+  "skills": [ { "name": "TypeScript", "category": "Languages" } ]
+}`;
+
+/**
+ * Onboarding shortcut: convert an existing resume into profile JSON via the
+ * user's own claude.ai / ChatGPT, then paste the JSON back into the options
+ * page. No job context needed.
+ */
+export function buildProfileImportPrompt(): string {
+  return [
+    'Convert the resume text below into structured JSON. Transcribe faithfully — do not embellish, invent, or omit content. Where the resume gives a date range, keep its wording (e.g. "Jun 2024 - Present" becomes start "Jun 2024", current true).',
+    '',
+    'For each work/project bullet, add 1-4 lowercase "tags" naming the skills or tools that bullet demonstrates (these drive later resume tailoring).',
+    '',
+    '== OUTPUT FORMAT (strict) ==',
+    'Reply with a SINGLE fenced json code block matching this shape exactly (every key present; empty strings/arrays where the resume has nothing):',
+    '```json',
+    PROFILE_JSON_SPEC,
+    '```',
+    'No commentary before or after the block.',
+    '',
+    '== RESUME TEXT (paste yours below this line) ==',
+  ].join('\n');
+}
+
 /** The profile minus data an external chat has no business seeing. */
 function profileForPrompt(profile: Profile) {
   const { eeo: _eeo, documents: _docs, schemaVersion: _v, ...rest } = profile;

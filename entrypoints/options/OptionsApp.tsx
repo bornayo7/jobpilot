@@ -9,8 +9,11 @@ import {
   type WorkEntry,
 } from '@lib/schema/profile';
 import { migrateProfile } from '@lib/schema/migrations';
-import { loadProfile, saveProfile } from '@lib/storage/profileStore';
+import { loadProfile, saveProfile, watchProfile } from '@lib/storage/profileStore';
 import { DocumentsCard } from '@components/DocumentsCard';
+import { ImportProfileCard } from '@components/ImportProfileCard';
+import { BackupCard } from '@components/BackupCard';
+import { ProfileSwitcher } from '@components/ProfileSwitcher';
 
 export function OptionsApp() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -19,7 +22,12 @@ export function OptionsApp() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    loadProfile().then(setProfile);
+    void loadProfile().then(setProfile);
+    // Profile switches (from the switcher) swap the whole editor contents.
+    return watchProfile((next) => {
+      setProfile(next);
+      setDirty(false);
+    });
   }, []);
 
   if (!profile) return <div className="options"><p>Loading…</p></div>;
@@ -60,6 +68,7 @@ export function OptionsApp() {
     <div className="options">
       <header className="options-header">
         <h1>JobPilot profile</h1>
+        <ProfileSwitcher />
         <div className="actions">
           <button onClick={exportJson}>Export JSON</button>
           <button onClick={() => fileInputRef.current?.click()}>Import JSON</button>
@@ -77,6 +86,7 @@ export function OptionsApp() {
         </div>
       </header>
 
+      <ImportProfileCard profile={profile} update={update} />
       <BasicsCard profile={profile} update={update} />
       <DocumentsCard profile={profile} update={update} />
       <LinksCard profile={profile} update={update} />
@@ -87,6 +97,7 @@ export function OptionsApp() {
       <WorkAuthCard profile={profile} update={update} />
       <EeoCard profile={profile} update={update} />
       <PreferencesCard profile={profile} update={update} />
+      <BackupCard />
 
       <div className="save-float">
         <span className="status">

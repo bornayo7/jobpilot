@@ -64,13 +64,25 @@ export interface FillResult {
 
 /* ---------- Port message unions ---------- */
 
+/** A free-text value snapshotted at submit time, for the answers bank. */
+export interface CapturedAnswer {
+  label: string;
+  value: string;
+}
+
 /** Content script → background. */
 export type CsToBg =
   | { t: 'cs/ready'; atsId: AtsId | null; url: string }
   | { t: 'cs/fields'; fields: FormFieldDescriptor[] }
   | { t: 'cs/fillResults'; results: FillResult[] }
   | { t: 'cs/wizardStep'; stepId: string }
-  | { t: 'cs/submitDetected'; url: string; confirmationText: string }
+  /** User activated a submit-looking control — answers snapshotted NOW,
+   *  before navigation destroys the form. */
+  | { t: 'cs/submitAttempt'; url: string; title: string; answers: CapturedAnswer[] }
+  /** A confirmation page/modal appeared — the application really went through. */
+  | { t: 'cs/submitDetected'; url: string; title: string; confirmationText: string }
+  /** The element the user right-clicked resolves to this field. */
+  | { t: 'cs/contextField'; fieldId: string }
   | { t: 'cs/jdText'; text: string; title: string };
 
 /** Background → content script. */
@@ -79,6 +91,8 @@ export type BgToCs =
   | { t: 'bg/execute'; instructions: FillInstruction[]; files?: SerializedFile[] }
   | { t: 'bg/highlight'; fieldId: string }
   | { t: 'bg/extractJd' }
+  /** Resolve the last right-clicked element to a discovered field. */
+  | { t: 'bg/identifyContext' }
   | { t: 'bg/wizardNext' };
 
 /** Side panel → background. */
