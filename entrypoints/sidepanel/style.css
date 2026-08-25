@@ -343,6 +343,83 @@ button.primary:hover:not(:disabled) {
   border-style: dashed;
 }
 
+.generate-tab section {
+  margin-bottom: 18px;
+}
+
+.gen-h {
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+
+.prompt-type-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.copy-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0;
+}
+
+.copy-row a {
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.paste-area {
+  width: 100%;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 9px;
+  resize: vertical;
+  margin-bottom: 6px;
+}
+
+.problem-list {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+.diff-box {
+  border: 1px solid var(--warn);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-top: 8px;
+}
+
+.diff-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--warn);
+}
+
+.version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 9px;
+  margin-bottom: 6px;
+}
+
+.version-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .settings section {
   margin-bottom: 18px;
 }
