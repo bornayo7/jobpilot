@@ -29,6 +29,11 @@ describe('sseEvents', () => {
     expect(await collect(sseEvents(res))).toEqual(['one', '[DONE]']);
   });
 
+  it('yields a final event that has no trailing blank line', async () => {
+    const res = responseFromChunks(['data: one\n\ndata: two\n']);
+    expect(await collect(sseEvents(res))).toEqual(['one', 'two']);
+  });
+
   it('joins multi-line data payloads', async () => {
     const res = responseFromChunks(['data: line1\ndata: line2\n\n']);
     expect(await collect(sseEvents(res))).toEqual(['line1\nline2']);

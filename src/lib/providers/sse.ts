@@ -11,6 +11,14 @@ export async function* sseEvents(response: Response): AsyncGenerator<string> {
   const decoder = new TextDecoder();
   let buffer = '';
 
+  const dataOf = (rawEvent: string): string | null => {
+    const dataLines = rawEvent
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).trimStart());
+    return dataLines.length > 0 ? dataLines.join('\n') : null;
+  };
+
   try {
     while (true) {
       const { done, value } = await reader.read();
@@ -23,17 +31,15 @@ export async function* sseEvents(response: Response): AsyncGenerator<string> {
         const rawEvent = buffer.slice(0, sepIndex);
         buffer = buffer.slice(sepIndex).replace(/^\r?\n\r?\n/, '');
 
-        const dataLines = rawEvent
-          .split(/\r?\n/)
-          .filter((line) => line.startsWith('data:'))
-          .map((line) => line.slice(5).trimStart());
-        if (dataLines.length > 0) {
-          yield dataLines.join('\n');
-        }
+        const data = dataOf(rawEvent);
+        if (data !== null) yield data;
       }
     }
+    // A stream that ends without the final blank line still carries an event.
+    const tail = dataOf(buffer);
+    if (tail !== null) yield tail;
   } finally {
-    reader.releaseLock();
+    await cancel(reader);
   }
 }
 
@@ -61,6 +67,16 @@ export async function* ndjsonLines(response: Response): AsyncGenerator<string> {
     const tail = buffer.trim();
     if (tail) yield tail;
   } finally {
-    reader.releaseLock();
+    await cancel(reader);
   }
+}
+
+/**
+ * Consumers normally break out of the loop on `[DONE]` rather than draining the
+ * body, which runs the generator's finally clause. Releasing the lock alone
+ * leaves the response body — and its connection — open, so cancel first.
+ */
+async function cancel(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
+  await reader.cancel().catch(() => undefined);
+  reader.releaseLock();
 }
