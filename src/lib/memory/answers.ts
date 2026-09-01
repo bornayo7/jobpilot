@@ -27,9 +27,12 @@ export async function saveAnswer(
     createdAt: Date.now(),
   };
   const db = await getDb();
-  // Dedupe: same normalized question + same answer text = one record.
+  // Dedupe: same normalized question + same answer text = one record. Return
+  // the record that is actually in the store — handing back the freshly minted
+  // one would give the caller an id that resolves to nothing.
   const existing = await db.getAllFromIndex('answers', 'byNormalized', record.questionNormalized);
-  if (existing.some((e) => e.answer.trim() === record.answer.trim())) return record;
+  const duplicate = existing.find((e) => e.answer.trim() === record.answer.trim());
+  if (duplicate) return duplicate;
   await db.put('answers', record);
   return record;
 }
