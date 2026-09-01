@@ -19,19 +19,3 @@ export function deepQuerySelectorAll<E extends Element = Element>(
   visit(root);
   return results;
 }
-
-/** First match across shadow boundaries, or null. */
-export function deepQuerySelector<E extends Element = Element>(
-  selector: string,
-  root: ParentNode = document,
-): E | null {
-  const direct = root.querySelector<E>(selector);
-  if (direct) return direct;
-  for (const el of root.querySelectorAll<Element>('*')) {
-    if (el.shadowRoot) {
-      const found = deepQuerySelector<E>(selector, el.shadowRoot);
-      if (found) return found;
-    }
-  }
-  return null;
-}

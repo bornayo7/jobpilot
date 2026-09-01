@@ -1,5 +1,5 @@
-import React from 'react';
 import { Document, Font, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
+import { renderPdfToBytes } from './renderToBytes';
 
 Font.registerHyphenationCallback((word) => [word]);
 
@@ -51,15 +51,6 @@ export function CoverLetterPdf({ letter }: { letter: LetterInfo }) {
   );
 }
 
-export async function renderCoverLetterPdf(letter: LetterInfo): Promise<ArrayBuffer> {
-  const mod = await import('@react-pdf/renderer');
-  const doc = <CoverLetterPdf letter={letter} />;
-  if (typeof (mod as { renderToBuffer?: unknown }).renderToBuffer === 'function') {
-    const buffer = await (
-      mod as unknown as { renderToBuffer: (d: React.ReactElement) => Promise<Uint8Array> }
-    ).renderToBuffer(doc);
-    return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
-  }
-  const blob = await mod.pdf(doc).toBlob();
-  return blob.arrayBuffer();
+export function renderCoverLetterPdf(letter: LetterInfo): Promise<ArrayBuffer> {
+  return renderPdfToBytes(<CoverLetterPdf letter={letter} />);
 }

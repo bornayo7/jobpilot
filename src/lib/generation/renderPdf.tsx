@@ -1,6 +1,6 @@
-import React from 'react';
 import { Document, Font, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { ResumeVersion } from '../schema/resumeVersion';
+import { renderPdfToBytes } from './renderToBytes';
 
 // ATS rule: no soft hyphens in the text layer — parsers extract them as
 // garbage characters mid-word.
@@ -144,14 +144,6 @@ function Bullet({ text }: { text: string }) {
   );
 }
 
-/** Render to bytes in both environments: extension page (Blob) and Node tests. */
-export async function renderResumePdf(version: ResumeVersion): Promise<ArrayBuffer> {
-  const mod = await import('@react-pdf/renderer');
-  const doc = <ResumePdf version={version} />;
-  if (typeof (mod as { renderToBuffer?: unknown }).renderToBuffer === 'function') {
-    const buffer = await (mod as unknown as { renderToBuffer: (d: React.ReactElement) => Promise<Uint8Array> }).renderToBuffer(doc);
-    return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
-  }
-  const blob = await mod.pdf(doc).toBlob();
-  return blob.arrayBuffer();
+export function renderResumePdf(version: ResumeVersion): Promise<ArrayBuffer> {
+  return renderPdfToBytes(<ResumePdf version={version} />);
 }
