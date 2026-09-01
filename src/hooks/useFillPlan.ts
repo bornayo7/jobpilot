@@ -41,7 +41,11 @@ export function useFillPlan(state: PanelState) {
       return;
     }
     void listDocuments().then((docs) => {
-      const doc = docs.find((d) => d.id === id) ?? docs[0] ?? null;
+      // No fallback to "some other document": the blob store also holds
+      // generated cover letters and DOCX twins, and attaching one of those to a
+      // real application is worse than attaching nothing. A dangling default
+      // surfaces as the "no default resume" warning instead.
+      const doc = docs.find((d) => d.id === id) ?? null;
       setResume(doc ? { blobId: doc.id, filename: doc.name } : null);
     });
   }, [profile]);
