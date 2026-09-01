@@ -154,21 +154,42 @@ export default defineContentScript({
       true,
     );
 
-    const connect = () => {
-      port = browser.runtime.connect({ name: CS_PORT });
+    // A service-worker restart is transient and reconnects immediately. An
+    // extension reload/uninstall invalidates this context permanently: connect()
+    // then throws on every call, so back off and give up rather than spinning at
+    // 500ms forever on a page the user is still reading.
+    const RECONNECT_DELAYS_MS = [500, 1_000, 2_000, 5_000, 10_000];
+    let reconnectAttempt = 0;
+
+    const scheduleReconnect = () => {
+      const delay = RECONNECT_DELAYS_MS[reconnectAttempt];
+      if (delay === undefined) return; // context gone for good
+      reconnectAttempt += 1;
+      setTimeout(connect, delay);
+    };
+
+    function connect(): void {
+      try {
+        port = browser.runtime.connect({ name: CS_PORT });
+      } catch {
+        // "Extension context invalidated" — the old content script is orphaned.
+        port = null;
+        scheduleReconnect();
+        return;
+      }
       port.onMessage.addListener(handleMessage);
       port.onDisconnect.addListener(() => {
         port = null;
         stopObserving?.();
         stopObserving = null;
-        // Service worker restarted or extension reloaded — reconnect shortly.
-        setTimeout(connect, 500);
+        scheduleReconnect();
       });
 
+      reconnectAttempt = 0;
       post({ t: 'cs/ready', atsId, url: location.href });
       scanAndReport();
       stopObserving = observeFields(scanAndReport);
-    };
+    }
 
     connect();
   },
