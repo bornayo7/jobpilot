@@ -369,6 +369,12 @@ function SkillsCard({ profile, update }: CardProps) {
       <label className="field">
         Skills
         <textarea
+          // Uncontrolled (commits on blur) so typing isn't re-parsed per
+          // keystroke — but keyed on the stored value so a profile switch or a
+          // resume import remounts it. Without the key the box kept showing the
+          // previous profile's skills and blurring wrote them back over the new
+          // ones.
+          key={skillsText}
           rows={3}
           defaultValue={skillsText}
           onBlur={(e) => {
