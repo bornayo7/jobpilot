@@ -27,7 +27,8 @@ export function BackupCard() {
       a.href = url;
       a.download = `jobpilot-backup-${new Date().toISOString().slice(0, 10)}.jpbak`;
       a.click();
-      URL.revokeObjectURL(url);
+      // Revoking synchronously races the download the click just started.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
       setStatus('Backup downloaded. The passphrase is NOT stored anywhere — keep it.');
     } catch (err) {
       setStatus(`Export failed: ${String(err).slice(0, 200)}`);

@@ -50,7 +50,8 @@ export function OptionsApp() {
     a.href = url;
     a.download = 'jobpilot-profile.json';
     a.click();
-    URL.revokeObjectURL(url);
+    // Revoking synchronously races the download the click just started.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
   const importJson = async (file: File) => {
