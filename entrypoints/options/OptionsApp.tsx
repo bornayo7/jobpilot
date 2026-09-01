@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  emptyProfile,
   newId,
   ProfileSchema,
   type EduEntry,
