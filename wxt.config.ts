@@ -23,8 +23,6 @@ export default defineConfig({
       'unlimitedStorage',
       'activeTab',
       'scripting',
-      'webNavigation',
-      'identity',
       'contextMenus',
     ],
     commands: {

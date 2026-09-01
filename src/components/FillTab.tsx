@@ -183,7 +183,6 @@ export function FillTab({ state, actions }: { state: PanelState; actions: Action
         return (
           <FramePlanView
             key={frameId}
-            frameId={frameId}
             frameLabel={frameEntries.length > 1 ? `frame ${frameId}${frame.atsId ? ` · ${ATS_LABELS[frame.atsId]}` : ''}` : null}
             plan={plan}
             fillResults={state.fillResults}
@@ -227,7 +226,6 @@ async function collectFiles(instructions: FillInstruction[]): Promise<Serialized
 }
 
 function FramePlanView({
-  frameId,
   frameLabel,
   plan,
   fillResults,
@@ -237,7 +235,6 @@ function FramePlanView({
   onValue,
   onKind,
 }: {
-  frameId: number;
   frameLabel: string | null;
   plan: FramePlan;
   fillResults: PanelState['fillResults'];
@@ -264,7 +261,7 @@ function FramePlanView({
   );
 
   return (
-    <Fragment key={frameId}>
+    <Fragment>
       {frameLabel && <div className="frame-header">{frameLabel}</div>}
       {autoRows.map(renderRow)}
       {reviewRows.length > 0 && <div className="frame-header">Needs your review</div>}
