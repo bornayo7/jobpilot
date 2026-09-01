@@ -150,6 +150,10 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Ac
       setPasted('');
       clearPreview();
       setVersions(await listVersions());
+    } catch (err) {
+      // Without this the rejection is unhandled and the button just goes idle,
+      // leaving the user unsure whether the version was stored.
+      setRenderProblems([`Could not store this version: ${String(err).slice(0, 200)}`]);
     } finally {
       setBusy('');
     }
@@ -165,16 +169,23 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Ac
     // does, and keep the page title only as a fallback.
     const company = companyFromUrl(job.url).company || job.title;
 
+    setRenderProblems([]);
+
     if (promptType === 'answer') {
       // Generated answers live in the bank, jobless and NON-reusable by
       // default — flipping the flag is a deliberate act (anti-answer-bleed).
-      await saveAnswer({
-        questionRaw: question.trim() || 'Custom answer',
-        answer: text,
-        jobId: '',
-        company,
-        reusable: false,
-      });
+      try {
+        await saveAnswer({
+          questionRaw: question.trim() || 'Custom answer',
+          answer: text,
+          jobId: '',
+          company,
+          reusable: false,
+        });
+      } catch (err) {
+        setRenderProblems([`Could not save this answer: ${String(err).slice(0, 200)}`]);
+        return;
+      }
       setOutcome(null);
       setPasted('');
       return;
@@ -214,6 +225,8 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Ac
       setOutcome(null);
       setPasted('');
       setVersions(await listVersions());
+    } catch (err) {
+      setRenderProblems([`Could not store this cover letter: ${String(err).slice(0, 200)}`]);
     } finally {
       setBusy('');
     }
@@ -368,6 +381,18 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Ac
                 {busy ||
                   (promptType === 'answer' ? 'Save to answers bank' : 'Save + render PDF')}
               </button>
+              {renderProblems.length > 0 && (
+                <div className="warn-box" style={{ marginTop: 8 }}>
+                  <div>
+                    <strong>Nothing was stored:</strong>
+                    <ul className="problem-list">
+                      {renderProblems.map((problem, i) => (
+                        <li key={i}>{problem}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </section>
