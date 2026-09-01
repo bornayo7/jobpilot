@@ -492,9 +492,24 @@ async function blobUrlFor(blobId: string): Promise<{ url: string; name: string }
   return { url: URL.createObjectURL(new Blob([doc.bytes], { type: doc.type })), name: doc.name };
 }
 
+/**
+ * Object URLs handed to the browser (a new tab, a download) must outlive the
+ * call: revoking synchronously after click()/open() races the fetch and can
+ * produce an empty tab or a cancelled download. Revoke on a timer instead —
+ * long enough for the browser to have read the blob, short enough not to pin
+ * a resume-sized buffer in memory.
+ */
+const OBJECT_URL_TTL_MS = 60_000;
+
+function revokeLater(url: string): void {
+  setTimeout(() => URL.revokeObjectURL(url), OBJECT_URL_TTL_MS);
+}
+
 async function openBlob(blobId: string): Promise<void> {
   const found = await blobUrlFor(blobId);
-  if (found) window.open(found.url, '_blank');
+  if (!found) return;
+  window.open(found.url, '_blank');
+  revokeLater(found.url);
 }
 
 async function downloadBlob(blobId: string): Promise<void> {
@@ -504,7 +519,7 @@ async function downloadBlob(blobId: string): Promise<void> {
   a.href = found.url;
   a.download = found.name;
   a.click();
-  URL.revokeObjectURL(found.url);
+  revokeLater(found.url);
 }
 
 function fileBaseName(raw: string): string {
