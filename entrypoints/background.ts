@@ -61,6 +61,15 @@ export default defineBackground(() => {
   });
 
   /** Confirmation seen: pair with the attempt, write tracker job + answers. */
+  /** Drop attempts past their TTL so a stale one can never pair with a later
+   *  confirmation — tab ids are reused, and the map is otherwise unbounded. */
+  const pruneAttempts = () => {
+    const cutoff = Date.now() - ATTEMPT_TTL_MS;
+    for (const [tabId, attempt] of pendingAttempts) {
+      if (attempt.at < cutoff) pendingAttempts.delete(tabId);
+    }
+  };
+
   const recordApplication = async (
     tabId: number,
     detected: { url: string; title: string },
@@ -165,6 +174,7 @@ export default defineBackground(() => {
         if (msg.t === 'cs/ready') {
           frameMeta.set(key, { atsId: msg.atsId, url: msg.url });
         } else if (msg.t === 'cs/submitAttempt') {
+          pruneAttempts();
           pendingAttempts.set(tabId, {
             url: msg.url,
             title: msg.title,
@@ -256,6 +266,11 @@ export default defineBackground(() => {
       });
       return;
     }
+  });
+
+  // A closed tab can never produce the confirmation its attempt was waiting for.
+  browser.tabs.onRemoved.addListener((tabId) => {
+    pendingAttempts.delete(tabId);
   });
 
   // Keep attached panels pointed at the tab the user is actually looking at.
