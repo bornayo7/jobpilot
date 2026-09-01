@@ -31,7 +31,9 @@ export function computeMatchGap(jdText: string, profile: Profile): MatchGap {
   for (const skill of profile.skills) {
     const needle = normalizeForSignature(skill.name);
     if (!needle) continue;
-    (jdNorm.includes(` ${needle} `) || jdNorm.includes(needle) ? coveredSkills : unusedSkills).push(skill.name);
+    // Whole-token match only. A bare `includes(needle)` would call "C", "R",
+    // or "Go" covered because they appear inside unrelated words.
+    (jdNorm.includes(` ${needle} `) ? coveredSkills : unusedSkills).push(skill.name);
   }
 
   // Profile text corpus for absence checks.
