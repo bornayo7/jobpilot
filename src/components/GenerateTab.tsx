@@ -25,6 +25,7 @@ import {
 import { getDb } from '@lib/storage/db';
 import { computeMatchGap } from '@lib/memory/matchGap';
 import { saveAnswer } from '@lib/memory/answers';
+import { companyFromUrl } from '@lib/tracker/detect';
 
 interface Actions {
   send(msg: PanelToBg): void;
@@ -159,6 +160,11 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Ac
     const text = pasted.trim();
     if (!text) return;
 
+    // job.title is the page title ("Software Engineer Intern — Careers"), not
+    // the employer. Derive the company from the ATS URL the way the tracker
+    // does, and keep the page title only as a fallback.
+    const company = companyFromUrl(job.url).company || job.title;
+
     if (promptType === 'answer') {
       // Generated answers live in the bank, jobless and NON-reusable by
       // default — flipping the flag is a deliberate act (anti-answer-bleed).
@@ -166,7 +172,7 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Ac
         questionRaw: question.trim() || 'Custom answer',
         answer: text,
         jobId: '',
-        company: job.title,
+        company,
         reusable: false,
       });
       setOutcome(null);
@@ -188,19 +194,19 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Ac
       const pdfBytes = await renderCoverLetterPdf({
         name: `${basics.firstName} ${basics.lastName}`.trim() || 'Cover letter',
         contactLine,
-        company: job.title,
+        company,
         date: new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }),
         body: text,
       });
       const pdfBlobId = await storeRenderedBlob(
-        `${fileBaseName(job.title || 'cover-letter')}-cover-letter.pdf`,
+        `${fileBaseName(company || 'cover-letter')}-cover-letter.pdf`,
         'application/pdf',
         pdfBytes,
       );
       await saveVersion({
         kind: 'coverLetter',
         label: 'Cover letter',
-        company: job.title,
+        company,
         jobUrl: job.url,
         data: { text },
         pdfBlobId,
