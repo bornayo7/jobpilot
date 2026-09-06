@@ -72,7 +72,13 @@ export async function resolveFields(input: {
     confidence: number;
   }
 
+  // Explicit corrections override every automatic tier, including adapters.
+  const cached = await cacheGet(enriched.map((field) => field.signature));
   const pending: Pending[] = enriched.map((field) => {
+    const correction = cached.get(field.signature);
+    if (correction?.source === 'user-correction') {
+      return { field, kind: correction.kind, source: 'user', confidence: correction.confidence };
+    }
     const adapterKind = adapter?.classify(field) ?? null;
     if (adapterKind) return { field, kind: adapterKind, source: 'adapter', confidence: 1 };
     const heuristic = heuristicMatch(field);
@@ -83,7 +89,6 @@ export async function resolveFields(input: {
   // Tier 3: cache.
   const unresolved = pending.filter((p) => p.kind === null);
   if (unresolved.length > 0) {
-    const cached = await cacheGet(unresolved.map((p) => p.field.signature));
     for (const entry of unresolved) {
       const hit = cached.get(entry.field.signature);
       if (hit) {

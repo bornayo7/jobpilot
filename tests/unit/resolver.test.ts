@@ -11,6 +11,7 @@ vi.mock('@lib/providers/router', () => ({
 import { resolveFields } from '@lib/fill/resolver';
 import { emptyProfile } from '@lib/schema/profile';
 import { SettingsSchema } from '@lib/storage/settingsStore';
+import { cacheSet } from '@lib/storage/mappingCache';
 import type { FormFieldDescriptor } from '@lib/messaging/protocol';
 
 function field(partial: Partial<FormFieldDescriptor> & { fieldId: string; signature: string }): FormFieldDescriptor {
@@ -82,6 +83,23 @@ describe('resolveFields', () => {
 
     expect(outcome.rows).toHaveLength(0);
     expect(outcome.unmatched.map((f) => f.fieldId)).toEqual(['x']);
+  });
+
+  it('retains manual corrections over adapters and heuristics on subsequent scans', async () => {
+    await cacheSet([
+      { signature: 'adapter', entry: { kind: 'name.first', confidence: 1, source: 'user-correction' } },
+      { signature: 'heuristic', entry: { kind: 'unknown', confidence: 1, source: 'user-correction' } },
+    ]);
+    const result = await resolveFields({
+      ...baseInput,
+      fields: [
+        field({ fieldId: 'a', signature: 'adapter', name: 'email', label: 'Email' }),
+        field({ fieldId: 'b', signature: 'heuristic', label: 'First name' }),
+      ],
+    });
+    expect(result.rows[0]).toMatchObject({ kind: 'name.first', source: 'user', instruction: { value: 'Ada' } });
+    expect(result.unmatched.map((f) => f.fieldId)).toEqual(['b']);
+    expect(chatMock).not.toHaveBeenCalled();
   });
 
   it('caches LLM results — the second resolve makes zero LLM calls', async () => {
