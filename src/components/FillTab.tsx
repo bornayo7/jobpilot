@@ -345,7 +345,7 @@ function RowView({
             <option value="checked">checked</option>
             <option value="unchecked">unchecked</option>
           </select>
-        ) : row.field.control === 'select' && row.field.options ? (
+        ) : (row.field.control === 'select' || row.field.control === 'radio') && row.field.options?.length ? (
           <select
             value={typeof row.instruction?.value === 'string' ? row.instruction.value : ''}
             onChange={(e) => onValue(fieldId, e.target.value)}

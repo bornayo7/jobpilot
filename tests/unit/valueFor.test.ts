@@ -97,6 +97,21 @@ describe('valueFor', () => {
     ).toBeNull();
   });
 
+  it('answers boolean kinds against a radio group through its option values', () => {
+    const radio = field({
+      control: 'radio',
+      options: [
+        { value: 'opt_1', label: 'Yes' },
+        { value: 'opt_2', label: 'No' },
+      ],
+    });
+    expect(valueFor('auth.workAuthorized', radio, profile, null)).toMatchObject({
+      action: 'selectOption',
+      value: 'opt_1',
+    });
+    expect(valueFor('auth.needsSponsorship', radio, profile, null)?.value).toBe('opt_2');
+  });
+
   it('matches EEO strings to options and always flags for review', () => {
     const veteran = valueFor(
       'eeo.veteran',

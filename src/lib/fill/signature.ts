@@ -37,6 +37,12 @@ export function normalizeForSignature(text: string): string {
     .trim();
 }
 
+/** True when `needle` occurs in `haystack` as a whole token sequence (both
+ *  already normalized). "no" is not inside "now"; "us" is not inside "austin". */
+export function containsTokens(haystack: string, needle: string): boolean {
+  return ` ${haystack} `.includes(` ${needle} `);
+}
+
 function fnv1a64(input: string): string {
   // 64-bit FNV-1a using BigInt; returns 16 hex chars.
   let hash = 0xcbf29ce484222325n;

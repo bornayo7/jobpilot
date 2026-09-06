@@ -59,6 +59,53 @@ describe('discoverFields', () => {
     expect(fields[0]).toMatchObject({ control: 'file', name: 'resume' });
   });
 
+  it('reports a named radio group as one field with the buttons as options', () => {
+    document.body.innerHTML = `
+      <form>
+        <fieldset>
+          <legend>Are you legally authorized to work in the United States? *</legend>
+          <label><input type="radio" name="auth" value="1" required /> Yes</label>
+          <label><input type="radio" name="auth" value="0" /> No</label>
+        </fieldset>
+        <div class="field">
+          <div>Will you now or in the future require sponsorship?</div>
+          <input type="radio" id="sp-y" name="sponsor" value="yes" /><label for="sp-y">Yes</label>
+          <input type="radio" id="sp-n" name="sponsor" value="no" checked /><label for="sp-n">No</label>
+        </div>
+      </form>
+    `;
+
+    const fields = discoverFields(null);
+    expect(fields).toHaveLength(2);
+
+    const [auth, sponsor] = fields;
+    expect(auth).toMatchObject({
+      control: 'radio',
+      name: 'auth',
+      label: 'Are you legally authorized to work in the United States?',
+      required: true,
+      options: [
+        { value: '1', label: 'Yes' },
+        { value: '0', label: 'No' },
+      ],
+    });
+    expect(auth!.currentValue).toBeUndefined();
+
+    expect(sponsor).toMatchObject({
+      control: 'radio',
+      name: 'sponsor',
+      label: 'Will you now or in the future require sponsorship?',
+      currentValue: 'no',
+    });
+
+    // Every button in a group carries the group's id, and rescans keep it.
+    const ids = Array.from(document.querySelectorAll('input[name="auth"]')).map((r) =>
+      r.getAttribute('data-jobpilot-id'),
+    );
+    expect(new Set(ids).size).toBe(1);
+    expect(discoverFields(null)[0]!.fieldId).toBe(auth!.fieldId);
+  });
+
   it('surfaces Workday-style data-automation-id as atsFieldKey', () => {
     document.body.innerHTML = `
       <div data-automation-id="legalNameSection_firstName">

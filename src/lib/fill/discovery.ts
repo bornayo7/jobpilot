@@ -2,6 +2,7 @@ import type { FormFieldDescriptor } from '../messaging/protocol';
 import type { AtsId } from './adapters/ids';
 import { deepQuerySelectorAll } from './dom/deepQuery';
 import { labelFor } from './dom/labelFor';
+import { radioGroupLabel, radioGroupOf, radioOptionLabel } from './dom/radioGroup';
 import { fieldSignature } from './signature';
 
 export const FIELD_ID_ATTR = 'data-jobpilot-id';
@@ -19,13 +20,28 @@ function nextFieldId(): string {
  * and describe them. Each element is stamped with data-jobpilot-id so later
  * FillInstructions can address it without brittle selectors. Safe to call
  * repeatedly — already-stamped elements keep their id.
+ *
+ * Named radio buttons are reported once per GROUP, with the buttons as the
+ * field's options, because that is the shape the resolver already matches
+ * profile answers against for selects.
  */
 export function discoverFields(atsId: AtsId | null, root: ParentNode = document): FormFieldDescriptor[] {
   const descriptors: FormFieldDescriptor[] = [];
+  const groupedRadios = new Set<Element>();
 
   for (const el of deepQuerySelectorAll<HTMLElement>(CANDIDATE_SELECTOR, root)) {
     const control = classifyControl(el);
     if (!control) continue;
+
+    if (control === 'radio' && el instanceof HTMLInputElement && el.getAttribute('name')) {
+      if (groupedRadios.has(el)) continue;
+      const group = radioGroupOf(el);
+      for (const member of group) groupedRadios.add(member);
+      const descriptor = describeRadioGroup(atsId, group);
+      if (descriptor) descriptors.push(descriptor);
+      continue;
+    }
+
     if (!isVisible(el) && control !== 'file') continue; // file inputs hide behind styled buttons
 
     const fieldId = el.getAttribute(FIELD_ID_ATTR) ?? nextFieldId();
@@ -87,6 +103,35 @@ export function findByFieldId(fieldId: string): HTMLElement | null {
   );
 }
 
+/** One descriptor for a whole radio group; every member carries the same id so
+ *  the right-click "fix this field" flow resolves from any button. */
+function describeRadioGroup(atsId: AtsId | null, group: HTMLInputElement[]): FormFieldDescriptor | null {
+  if (!group.some((r) => isVisible(r))) return null;
+  const first = group[0];
+  if (!first) return null;
+
+  const fieldId =
+    group.find((r) => r.hasAttribute(FIELD_ID_ATTR))?.getAttribute(FIELD_ID_ATTR) ?? nextFieldId();
+  for (const member of group) member.setAttribute(FIELD_ID_ATTR, fieldId);
+
+  const options = group.map((r) => ({ value: r.value, label: radioOptionLabel(r) }));
+  const name = first.getAttribute('name') ?? undefined;
+  const descriptor: FormFieldDescriptor = {
+    fieldId,
+    control: 'radio',
+    label: radioGroupLabel(group, options.map((o) => o.label)),
+    name,
+    id: first.getAttribute('id') ?? undefined,
+    required: group.some((r) => r.hasAttribute('required') || r.getAttribute('aria-required') === 'true'),
+    options,
+    atsFieldKey: atsFieldKeyFor(first, name),
+    signature: '',
+    currentValue: group.find((r) => r.checked)?.value,
+  };
+  descriptor.signature = fieldSignature(atsId, descriptor);
+  return descriptor;
+}
+
 function classifyControl(el: HTMLElement): FormFieldDescriptor['control'] | null {
   if (el instanceof HTMLTextAreaElement) return 'textarea';
   if (el instanceof HTMLSelectElement) return 'select';
@@ -128,7 +173,10 @@ function extractOptions(el: HTMLElement): { value: string; label: string }[] | u
 
 function currentValueOf(el: HTMLElement): string | undefined {
   if (el instanceof HTMLInputElement) {
-    if (el.type === 'checkbox' || el.type === 'radio') return el.checked ? 'true' : 'false';
+    if (el.type === 'checkbox') return el.checked ? 'true' : 'false';
+    // An unchecked (nameless, ungrouped) radio has no value yet — reporting
+    // 'false' made the resolver treat it as already filled.
+    if (el.type === 'radio') return el.checked ? el.value || 'true' : undefined;
     if (el.type === 'file') return undefined;
     return el.value || undefined;
   }

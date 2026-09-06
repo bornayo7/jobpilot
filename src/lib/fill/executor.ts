@@ -3,6 +3,7 @@ import { findByFieldId } from './discovery';
 import { setNativeChecked, setNativeValue } from './dom/setNativeValue';
 import { attachFileToInput } from './dom/attachFile';
 import { pickFromListbox } from './dom/pickFromListbox';
+import { pickRadio, type RadioPickResult } from './dom/radioGroup';
 
 /**
  * Runs in the content script. Executes fill instructions against stamped
@@ -52,10 +53,12 @@ async function executeOne(
       }
 
       case 'selectOption': {
+        const wanted = String(instruction.value);
+        // A radio group is discovered as one field with the buttons as options.
+        if (isRadio(el)) return radioResult(instruction.fieldId, pickRadio(el, wanted));
         if (!(el instanceof HTMLSelectElement)) {
           return { fieldId: instruction.fieldId, ok: false, error: 'not a select' };
         }
-        const wanted = String(instruction.value);
         const optionLabel = (o: HTMLOptionElement) => (o.label || o.text || '').trim().toLowerCase();
         const option =
           Array.from(el.options).find((o) => o.value === wanted) ??
@@ -88,6 +91,8 @@ async function executeOne(
 
       case 'pickListbox': {
         const target = String(instruction.value);
+        // Typing into a radio would overwrite its value attribute — pick instead.
+        if (isRadio(el)) return radioResult(instruction.fieldId, pickRadio(el, target));
         const result = await pickFromListbox(el, target);
         if (!result.ok) return { fieldId: instruction.fieldId, ok: false, error: result.error };
         return { fieldId: instruction.fieldId, ok: true, verifiedValue: result.picked };
@@ -100,4 +105,14 @@ async function executeOne(
   } catch (err) {
     return { fieldId: instruction.fieldId, ok: false, error: String(err) };
   }
+}
+
+function isRadio(el: HTMLElement): el is HTMLInputElement {
+  return el instanceof HTMLInputElement && el.type === 'radio';
+}
+
+function radioResult(fieldId: string, result: RadioPickResult): FillResult {
+  return result.ok
+    ? { fieldId, ok: true, verifiedValue: result.picked }
+    : { fieldId, ok: false, error: result.error };
 }

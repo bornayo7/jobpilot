@@ -84,7 +84,7 @@ Four stages, cheapest and most reliable first. Each field falls through to the n
 3. **Mapping cache** — answers from previous forms, plus any correction you've made by hand. Cache keys deliberately exclude per-posting identifiers, so "Why do you want to work here?" on two different Greenhouse boards is the same entry. A manual correction permanently shadows a model's guess.
 4. **One batched model call** for whatever is left, restricted to the non-sensitive allowlist, and cached for next time.
 
-Values are then materialized from your profile, matched against the field's real options where they exist, and presented for review. Fuzzy option matches, sensitive fields, screening questions, and anything below the confidence threshold are excluded from the bulk fill until you look at them.
+Values are then materialized from your profile, matched against the field's real options where they exist (a radio group counts as one field whose options are its buttons), and presented for review. Fuzzy option matches, sensitive fields, screening questions, and anything below the confidence threshold are excluded from the bulk fill until you look at them.
 
 ---
 
@@ -182,7 +182,6 @@ Honest list of what isn't done:
 - Multi-step application wizards aren't advanced automatically.
 - Split month/year date widgets (`setDate`) aren't implemented.
 - Chrome's built-in Prompt API is stubbed out, not wired up.
-- Radio groups expose no enumerable options to the resolver, so they route through the listbox picker and always ask for review.
 - The document store is shared between uploaded resumes and generated output, so the Documents list shows both.
 
 ---

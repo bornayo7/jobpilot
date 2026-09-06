@@ -46,6 +46,41 @@ describe('executeInstructions', () => {
     expect(results[0]).toMatchObject({ ok: false, error: 'element not found' });
   });
 
+  it('selects a radio group member by value or by label', async () => {
+    document.body.innerHTML = `
+      <form>
+        <fieldset>
+          <legend>Authorized to work?</legend>
+          <label><input type="radio" name="auth" value="1" /> Yes</label>
+          <label><input type="radio" name="auth" value="0" /> No</label>
+        </fieldset>
+      </form>`;
+    const [field] = discoverFields(null);
+    const yes = document.querySelector<HTMLInputElement>('input[value="1"]')!;
+    const no = document.querySelector<HTMLInputElement>('input[value="0"]')!;
+
+    const byValue = await executeInstructions([
+      instruction({ fieldId: field!.fieldId, action: 'selectOption', value: '0' }),
+    ]);
+    expect(byValue[0]).toMatchObject({ ok: true, verifiedValue: 'No' });
+    expect(no.checked).toBe(true);
+
+    const byLabel = await executeInstructions([
+      instruction({ fieldId: field!.fieldId, action: 'pickListbox', value: 'yes' }),
+    ]);
+    expect(byLabel[0]).toMatchObject({ ok: true, verifiedValue: 'Yes' });
+    expect(yes.checked).toBe(true);
+    expect(no.checked).toBe(false);
+    // The value attributes were never touched.
+    expect(yes.value).toBe('1');
+    expect(no.value).toBe('0');
+
+    const missing = await executeInstructions([
+      instruction({ fieldId: field!.fieldId, action: 'selectOption', value: 'maybe' }),
+    ]);
+    expect(missing[0]!.ok).toBe(false);
+  });
+
   it('sets checkboxes to the requested state', async () => {
     document.body.innerHTML = `<label><input type="checkbox" name="agree" /> I agree</label>`;
     const [field] = discoverFields(null);

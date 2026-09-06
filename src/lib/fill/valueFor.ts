@@ -2,7 +2,7 @@ import type { Profile } from '../schema/profile';
 import type { FieldKind } from '../schema/fieldKind';
 import { KIND_TO_PROFILE_PATH, SENSITIVE_KINDS } from '../schema/fieldKind';
 import type { FillAction, FormFieldDescriptor } from '../messaging/protocol';
-import { normalizeForSignature } from './signature';
+import { containsTokens, normalizeForSignature } from './signature';
 
 export interface ResolvedValue {
   action: FillAction;
@@ -163,9 +163,4 @@ function matchOption(
   }
 
   return null;
-}
-
-/** True when `needle` appears in `haystack` as a whole token sequence. */
-function containsTokens(haystack: string, needle: string): boolean {
-  return ` ${haystack} `.includes(` ${needle} `);
 }
