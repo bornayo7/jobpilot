@@ -27,7 +27,13 @@ interface ProfilesContainer {
 export async function loadContainer(): Promise<ProfilesContainer> {
   const stored = await browser.storage.local.get([CONTAINER_KEY, LEGACY_KEY]);
   const container = stored[CONTAINER_KEY] as ProfilesContainer | undefined;
-  if (container && container.profiles && container.activeId in container.profiles) {
+  if (container && container.profiles && Object.keys(container.profiles).length > 0) {
+    if (!(container.activeId in container.profiles)) {
+      // A dangling activeId is a repairable inconsistency, not a reason to
+      // throw away every stored profile. Point it at a surviving profile.
+      container.activeId = Object.keys(container.profiles)[0]!;
+      await saveContainer(container);
+    }
     return container;
   }
   // Migrate the single-profile era (or bootstrap fresh).

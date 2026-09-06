@@ -42,6 +42,22 @@ describe('multi-profile store', () => {
     expect((await loadProfile()).basics.firstName).toBe('Grace');
   });
 
+  it('repairs a container whose activeId points nowhere instead of wiping it', async () => {
+    await fakeBrowser.storage.local.set({
+      'jobpilot:profiles': {
+        activeId: 'gone',
+        profiles: {
+          swe: { name: 'SWE', profile: { schemaVersion: 1, basics: { firstName: 'Ada' } } },
+          ml: { name: 'ML', profile: { schemaVersion: 1, basics: { firstName: 'Grace' } } },
+        },
+      },
+    });
+    expect((await loadProfile()).basics.firstName).toBe('Ada');
+    const metas = await listProfiles();
+    expect(metas.map((m) => m.name).sort()).toEqual(['ML', 'SWE']);
+    expect(metas.find((m) => m.active)!.id).toBe('swe');
+  });
+
   it('duplicate copies the active profile; delete refuses to remove the last one', async () => {
     const active = await loadProfile();
     active.basics.email = 'ada@example.com';
