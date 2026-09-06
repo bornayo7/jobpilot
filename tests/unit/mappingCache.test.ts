@@ -47,4 +47,15 @@ describe('mappingCache', () => {
     ]);
     expect((await cacheGet(['old', 'new'])).size).toBe(2);
   });
+
+  it('retains manual corrections when model entries exceed the cache limit', async () => {
+    await cacheSet([{ signature: 'manual', entry: { kind: 'name.first', confidence: 1, source: 'user-correction' } }]);
+    await cacheSet(Array.from({ length: 2001 }, (_, i) => ({
+      signature: `model${i}`,
+      entry: { kind: 'question.freeText' as const, confidence: 0.8, source: 'llm' as const },
+    })));
+    const found = await cacheGet(['manual', ...Array.from({ length: 2001 }, (_, i) => `model${i}`)]);
+    expect(found.has('manual')).toBe(true);
+    expect(found.size).toBe(2001);
+  });
 });

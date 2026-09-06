@@ -86,8 +86,8 @@ async function writeEntries(entries: Parameters<typeof cacheSet>[0]): Promise<vo
     };
   }
 
-  // LRU prune by lastHit.
-  const keys = Object.keys(cache);
+  // Evict only model guesses; explicit user corrections are durable data.
+  const keys = Object.keys(cache).filter((key) => cache[key]!.source === 'llm');
   if (keys.length > MAX_ENTRIES) {
     keys
       .sort((a, b) => cache[a]!.lastHit - cache[b]!.lastHit)
