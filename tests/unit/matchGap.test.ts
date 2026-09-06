@@ -29,6 +29,13 @@ describe('computeMatchGap', () => {
     expect(gap.unusedSkills).toContain('Rust');
   });
 
+  it('a profile word that merely contains a posting term does not cover it', () => {
+    const p = emptyProfile();
+    p.skills = [{ name: 'Reactive Streams', category: '' }];
+    const posting = 'React developer wanted. React experience with React Native is essential.';
+    expect(computeMatchGap(posting, p).missingTerms).toContain('react');
+  });
+
   it('surfaces recurring JD terms the profile lacks', () => {
     const gap = computeMatchGap(jd, profile);
     expect(gap.missingTerms.join(' ')).toContain('graphql');

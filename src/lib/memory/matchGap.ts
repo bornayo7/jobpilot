@@ -1,5 +1,5 @@
 import type { Profile } from '../schema/profile';
-import { normalizeForSignature } from '../fill/signature';
+import { containsTokens, normalizeForSignature } from '../fill/signature';
 
 export interface MatchGap {
   /** Your profile skills that the posting actually mentions. */
@@ -24,7 +24,7 @@ const STOPWORDS = new Set(
  * own score is distrusted for exactly that.
  */
 export function computeMatchGap(jdText: string, profile: Profile): MatchGap {
-  const jdNorm = ` ${normalizeForSignature(jdText)} `;
+  const jdNorm = normalizeForSignature(jdText);
 
   const coveredSkills: string[] = [];
   const unusedSkills: string[] = [];
@@ -33,7 +33,7 @@ export function computeMatchGap(jdText: string, profile: Profile): MatchGap {
     if (!needle) continue;
     // Whole-token match only. A bare `includes(needle)` would call "C", "R",
     // or "Go" covered because they appear inside unrelated words.
-    (jdNorm.includes(` ${needle} `) ? coveredSkills : unusedSkills).push(skill.name);
+    (containsTokens(jdNorm, needle) ? coveredSkills : unusedSkills).push(skill.name);
   }
 
   // Profile text corpus for absence checks.
@@ -60,8 +60,10 @@ export function computeMatchGap(jdText: string, profile: Profile): MatchGap {
     }
   }
 
+  // Whole-token presence, same as the skills check above: "react" inside
+  // "reactive" or "go" inside "mongodb" is not coverage.
   const missingTerms = [...counts.entries()]
-    .filter(([term, count]) => count >= 2 && !profileText.includes(term))
+    .filter(([term, count]) => count >= 2 && !containsTokens(profileText, term))
     // Prefer bigrams and frequent terms; drop unigrams that are inside a kept bigram.
     .sort((a, b) => b[0].split(' ').length - a[0].split(' ').length || b[1] - a[1])
     .reduce<string[]>((kept, [term]) => {
