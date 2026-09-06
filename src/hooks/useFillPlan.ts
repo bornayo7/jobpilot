@@ -22,9 +22,11 @@ export interface FramePlan {
 export function useFillPlan(state: PanelState) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [resume, setResume] = useState<ResumeMeta | null>(null);
+  /** `undefined` = lookup for the current profile still in flight. */
+  const [resume, setResume] = useState<ResumeMeta | null | undefined>(undefined);
   const [plans, setPlans] = useState<Map<number, FramePlan>>(new Map());
   const resolveKeys = useRef<Map<number, string>>(new Map());
+  const resolveInputs = useRef<{ profile: Profile; settings: Settings; resume: ResumeMeta | null } | null>(null);
 
   useEffect(() => {
     void loadProfile().then(setProfile);
@@ -40,19 +42,40 @@ export function useFillPlan(state: PanelState) {
       setResume(null);
       return;
     }
+    // Hold resolution until the lookup lands: resolving with a not-yet-loaded
+    // resume would produce a plan with no file attachment.
+    setResume(undefined);
+    let cancelled = false;
     void listDocuments().then((docs) => {
+      if (cancelled) return;
       // No fallback to "some other document": the blob store also holds
       // generated cover letters and DOCX twins, and attaching one of those to a
       // real application is worse than attaching nothing. A dangling default
       // surfaces as the "no default resume" warning instead.
       const doc = docs.find((d) => d.id === id) ?? null;
-      setResume(doc ? { blobId: doc.id, filename: doc.name } : null);
+      // Keep the same reference when nothing changed so dependents don't re-run.
+      setResume((prev) =>
+        doc ? (prev && prev.blobId === doc.id && prev.filename === doc.name ? prev : { blobId: doc.id, filename: doc.name }) : null,
+      );
     });
+    return () => {
+      cancelled = true;
+    };
   }, [profile]);
 
-  // Re-resolve a frame whenever its field set actually changes.
+  // Re-resolve a frame whenever its field set actually changes — or whenever
+  // the inputs the plan was computed from (profile, settings, default resume)
+  // change. The original version keyed only on the fields, so the plan built
+  // before the resume lookup finished kept "no default resume" until the page
+  // happened to re-render its form, and profile edits made in the options page
+  // never reached an open panel.
   useEffect(() => {
-    if (!profile || !settings) return;
+    if (!profile || !settings || resume === undefined) return;
+    const previous = resolveInputs.current;
+    if (!previous || previous.profile !== profile || previous.settings !== settings || previous.resume !== resume) {
+      resolveInputs.current = { profile, settings, resume };
+      resolveKeys.current.clear();
+    }
     // A key configured for the mapping provider (or a local provider) enables tier 4.
     const llmEnabled =
       (settings.routing.mapping.provider === 'anthropic' && !!settings.anthropicKey) ||
@@ -189,7 +212,7 @@ export function useFillPlan(state: PanelState) {
     (frameId: number, fieldId: string, kind: FieldKind) => {
       if (!profile) return;
       mutateRow(frameId, fieldId, (row) => {
-        const resolved = valueFor(kind, row.field, profile, resume);
+        const resolved = valueFor(kind, row.field, profile, resume ?? null);
         const sensitive = SENSITIVE_KINDS.has(kind);
         const requiresReview =
           sensitive || kind === 'question.freeText' || kind === 'question.choice' || (resolved?.requiresReview ?? false);
@@ -218,7 +241,7 @@ export function useFillPlan(state: PanelState) {
     [mutateRow, profile, resume, plans],
   );
 
-  return { profile, settings, resume, plans, toggleInclude, editValue, editKind };
+  return { profile, settings, resume: resume ?? null, plans, toggleInclude, editValue, editKind };
 }
 
 async function logUnmatched(
