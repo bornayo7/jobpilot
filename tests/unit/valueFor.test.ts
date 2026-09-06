@@ -57,6 +57,46 @@ describe('valueFor', () => {
     expect(sponsorship?.value).toBe('n');
   });
 
+  it('fuzzy option matching is token-bounded: "no" never matches "now"', () => {
+    const sponsorship = valueFor(
+      'auth.needsSponsorship',
+      field({
+        control: 'select',
+        options: [
+          { value: 'y', label: 'Yes, I will require sponsorship now or in the future' },
+          { value: 'n', label: 'No, I will not require sponsorship' },
+        ],
+      }),
+      profile,
+      null,
+    );
+    expect(sponsorship).toMatchObject({ action: 'selectOption', value: 'n', requiresReview: true });
+
+    const authorized = valueFor(
+      'auth.workAuthorized',
+      field({
+        control: 'select',
+        options: [
+          { value: 'n', label: 'No, I am not authorized to work in the United States' },
+          { value: 'y', label: 'Yes, I am authorized to work in the United States' },
+        ],
+      }),
+      profile,
+      null,
+    );
+    expect(authorized?.value).toBe('y');
+
+    // A short option label must not match because it is a substring of the target.
+    expect(
+      valueFor(
+        'location.city',
+        field({ control: 'select', options: [{ value: 'us', label: 'US' }, { value: 'tin', label: 'Tin' }] }),
+        profile,
+        null,
+      ),
+    ).toBeNull();
+  });
+
   it('matches EEO strings to options and always flags for review', () => {
     const veteran = valueFor(
       'eeo.veteran',

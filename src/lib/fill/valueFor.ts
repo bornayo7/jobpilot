@@ -110,7 +110,12 @@ function rawValueFor(kind: FieldKind, profile: Profile): string | boolean | null
 
 /**
  * Match a target string against the field's options: exact normalized equality
- * first, then containment either way (fuzzy — flagged for review).
+ * first, then whole-token containment either way (fuzzy — flagged for review).
+ *
+ * Containment is token-bounded on purpose. A bare substring test made "no"
+ * match "Yes, I will require sponsorship NOW or in the future" — the opposite
+ * answer — because "now" contains "no". Options that merely start with the
+ * needle win over ones that contain it somewhere later.
  */
 function matchOption(
   field: FormFieldDescriptor,
@@ -140,10 +145,12 @@ function matchOption(
 
   for (const needle of needles) {
     if (!needle) continue;
-    const fuzzy = options.find((o) => {
-      const norm = normalizeForSignature(o.label);
-      return norm.includes(needle) || needle.includes(norm);
-    });
+    const fuzzy =
+      options.find((o) => normalizeForSignature(o.label).startsWith(`${needle} `)) ??
+      options.find((o) => {
+        const norm = normalizeForSignature(o.label);
+        return containsTokens(norm, needle) || containsTokens(needle, norm);
+      });
     if (fuzzy) {
       return {
         action: 'selectOption',
@@ -156,4 +163,9 @@ function matchOption(
   }
 
   return null;
+}
+
+/** True when `needle` appears in `haystack` as a whole token sequence. */
+function containsTokens(haystack: string, needle: string): boolean {
+  return ` ${haystack} `.includes(` ${needle} `);
 }
