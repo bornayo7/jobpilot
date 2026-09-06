@@ -185,10 +185,8 @@ function JobCard({
           follow up{' '}
           <input
             type="date"
-            value={job.followUpAt ? new Date(job.followUpAt).toISOString().slice(0, 10) : ''}
-            onChange={(e) =>
-              onPatch({ followUpAt: e.target.value ? new Date(e.target.value).getTime() : undefined })
-            }
+            value={job.followUpAt ? toLocalDateInput(job.followUpAt) : ''}
+            onChange={(e) => onPatch({ followUpAt: fromLocalDateInput(e.target.value) })}
             style={{ width: 130 }}
           />
         </label>
@@ -200,4 +198,23 @@ function JobCard({
 function daysAgo(timestamp?: number): number {
   if (!timestamp) return 0;
   return Math.max(0, Math.round((Date.now() - timestamp) / 86_400_000));
+}
+
+/**
+ * <input type="date"> speaks calendar dates in the USER's zone. The previous
+ * code formatted with toISOString (UTC) and parsed with new Date('YYYY-MM-DD')
+ * (also UTC midnight), so any evening user west of Greenwich saw tomorrow's
+ * date in the box and a follow-up set for "the 12th" came due at 7pm on the
+ * 11th. Format and parse as local calendar dates instead.
+ */
+function toLocalDateInput(timestamp: number): string {
+  const d = new Date(timestamp);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function fromLocalDateInput(value: string): number | undefined {
+  const [y, m, d] = value.split('-').map(Number);
+  if (!y || !m || !d) return undefined;
+  return new Date(y, m - 1, d, 9).getTime(); // 9am local: due during the working day
 }
