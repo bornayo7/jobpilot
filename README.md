@@ -20,11 +20,11 @@ JobPilot removes the repetition without removing you from the loop:
 
 ## What it does
 
-**Autofill.** Detects the ATS you're on, reads every fillable control on the page (including inside open shadow roots and cross-origin iframes), works out what each field wants, and fills it from your profile. Verifies each write by reading the value back — a fill that a React app silently reverted is reported as a failure, not a success.
+**Autofill.** Detects the ATS you're on, discovers supported controls (including inside open shadow roots and permitted cross-origin iframes), works out what each field wants, and fills it from your profile. Reads values back immediately to check each write; a site's later asynchronous changes still need visual review.
 
 **Prompt Studio.** Scans the job posting, then builds a complete, self-contained prompt for a tailored resume, a cover letter, a specific screening answer, or a follow-up email. You paste it into claude.ai or ChatGPT, paste the reply back, and JobPilot validates and renders it.
 
-**ATS-safe document rendering.** Approved resumes render to PDF *and* DOCX from the same JSON, so the two can never drift. Single column, standard PDF fonts, contact details in the body (headers and footers are invisible to many parsers), no soft hyphens. Every render is validated by extracting its own text layer with pdf.js and asserting the content is all there, in reading order — a resume that fails cannot be stored.
+**ATS-safe document rendering.** Approved resumes render to PDF *and* DOCX from the same JSON. Single column, standard PDF fonts, contact details in the body, no soft hyphens. PDF validation extracts the text layer with pdf.js and checks name/email, employers, work bullets, schools, sampled skills, and basic reading order. This is a structural check, not a guarantee that every ATS will parse every section correctly.
 
 **Answers bank.** Free-text answers are snapshotted the moment you click Submit, before navigation destroys the form. Similar questions on later applications surface them as ranked suggestions — never as autofill.
 
@@ -69,7 +69,7 @@ So JobPilot splits the two:
 | Field classification, when rules fail | Your configured API key or a local model | Fractions of a cent per form |
 | Resumes, cover letters, screening answers, follow-up emails | Copy-paste into your own claude.ai / ChatGPT | Nothing extra |
 
-The prompt it builds is complete and self-contained: the posting, your profile (minus anything sensitive), the tailoring rules, a strict output format, and a writing-style guide aimed at making the output not read like a chatbot wrote it. You paste the reply back and JobPilot validates it hard — a malformed paste is rejected with readable errors, never half-stored.
+The prompt it builds includes the posting, your profile with EEO fields removed, the tailoring rules, a strict output format, and a writing-style guide. Work authorization and preferences, including salary and visa notes, remain in the prompt: review it before pasting into an external chat. Malformed replies are rejected with readable errors before storage.
 
 For resumes, the review step also shows you **which bullets the model rewrote versus kept verbatim from your profile**. Rewritten bullets are where fabrication risk lives, so they're listed for you to read before you approve.
 
@@ -77,11 +77,11 @@ For resumes, the review step also shows you **which bullets the model rewrote ve
 
 ## How the autofill works
 
-Four stages, cheapest and most reliable first. Each field falls through to the next stage only if the one before it couldn't identify it.
+Saved manual corrections take precedence over every automatic stage. Other fields pass through four stages, falling through only when the preceding stage cannot identify them.
 
 1. **Per-ATS adapter** — platform-stable keys (Greenhouse's `first_name`, Ashby's `_systemfield_email`, Workday's `data-automation-id`). Deterministic, confidence 1.0. For Greenhouse, this also prefetches the job's real question schema from the public Job Board API, so selects use the exact values the server expects.
 2. **Heuristics** — normalized-label regexes plus `autocomplete` attributes. Deterministic and free.
-3. **Mapping cache** — answers from previous forms, plus any correction you've made by hand. Cache keys deliberately exclude per-posting identifiers, so "Why do you want to work here?" on two different Greenhouse boards is the same entry. A manual correction permanently shadows a model's guess.
+3. **Mapping cache** — model classifications from previous forms. Cache keys deliberately exclude per-posting identifiers. Manual corrections are checked before the automatic stages and are preserved when old model entries are evicted.
 4. **One batched model call** for whatever is left, restricted to the non-sensitive allowlist, and cached for next time.
 
 Values are then materialized from your profile, matched against the field's real options where they exist (a radio group counts as one field whose options are its buttons), and presented for review. Fuzzy option matches, sensitive fields, screening questions, and anything below the confidence threshold are excluded from the bulk fill until you look at them.
@@ -164,12 +164,12 @@ tests/unit/             Vitest suite
 ## Development
 
 ```bash
-npm test        # Vitest — 126 tests
+npm test        # Vitest regression suite
 npm run compile # tsc --noEmit
 npm run build   # production build
 ```
 
-TypeScript runs in `strict` mode with `noUncheckedIndexedAccess`. The suite covers the pure logic — resolvers, heuristics, signatures, parsers, schema migrations, document round-trips — not the DOM integration, which needs a real browser and a real posting.
+TypeScript runs in `strict` mode with `noUncheckedIndexedAccess`. Tests cover pure logic, document round-trips, React state transitions, DOM discovery/execution in happy-dom, and backup transactions in fake-indexeddb. Chrome integration and real postings still need browser testing. See [AUDIT.md](AUDIT.md) for the verified findings and prioritized follow-up work.
 
 ---
 
@@ -188,4 +188,4 @@ Honest list of what isn't done:
 
 ## Status
 
-Personal project, actively used and actively incomplete. There is no license file, which means default copyright applies — ask before reusing it.
+Personal project under development; live-portal operation remains unverified. There is no license file, which means default copyright applies — ask before reusing it.
