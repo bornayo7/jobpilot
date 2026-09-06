@@ -64,7 +64,11 @@ export function ImportProfileCard({
         <textarea
           rows={4}
           value={pasted}
-          onChange={(e) => setPasted(e.target.value)}
+          onChange={(e) => {
+            setPasted(e.target.value);
+            setOutcome(null);
+            setApplied(false);
+          }}
           placeholder="```json … ```"
         />
       </label>

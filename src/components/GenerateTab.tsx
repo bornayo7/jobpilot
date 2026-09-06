@@ -47,6 +47,16 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Ac
   const [versions, setVersions] = useState<VersionRecord[]>([]);
   const [previewUrl, setPreviewUrl] = useState('');
   const previewBytes = useRef<ArrayBuffer | null>(null);
+  const reviewRevision = useRef(0);
+
+  // Reviews and pending previews belong to one posting and one profile.
+  useEffect(() => {
+    reviewRevision.current += 1;
+    setOutcome(null);
+    setRenderProblems([]);
+    setPreviewUrl('');
+    previewBytes.current = null;
+  }, [state.tabId, state.tabUrl, profile]);
 
   useEffect(() => {
     void loadProfile().then(setProfile);
@@ -91,6 +101,7 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Ac
   };
 
   const clearPreview = () => {
+    reviewRevision.current += 1;
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl('');
     previewBytes.current = null;
@@ -100,6 +111,7 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Ac
     if (!profile) return;
     setRenderProblems([]);
     clearPreview();
+    const revision = reviewRevision.current;
     if (promptType === 'resume') {
       const result = importResumePaste(pasted, profile);
       setOutcome(result);
@@ -108,9 +120,11 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Ac
         setBusy('Rendering preview…');
         try {
           const bytes = await renderResumePdf(result.version);
+          if (reviewRevision.current !== revision) return;
           previewBytes.current = bytes;
           setPreviewUrl(URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })));
         } catch (err) {
+          if (reviewRevision.current !== revision) return;
           setRenderProblems([`Preview render failed: ${String(err).slice(0, 200)}`]);
         } finally {
           setBusy('');
@@ -127,18 +141,21 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Ac
   };
 
   const approveResume = async () => {
-    if (!outcome?.ok || !job || promptType !== 'resume') return;
+    if (!outcome?.ok || !job || promptType !== 'resume' || busy) return;
+    const revision = reviewRevision.current;
     const version = outcome.version;
     setBusy('Validating ATS parseability…');
     try {
       const pdfBytes = previewBytes.current ?? (await renderResumePdf(version));
       const validation = await validateResumePdf(pdfBytes, version);
+      if (reviewRevision.current !== revision) return;
       if (!validation.ok) {
         setRenderProblems(validation.problems);
         return;
       }
       setBusy('Rendering DOCX…');
       const docxBytes = await renderResumeDocx(version);
+      if (reviewRevision.current !== revision) return;
 
       const baseName = fileBaseName(version.meta.company || job.title || 'resume');
       const pdfBlobId = await storeRenderedBlob(`${baseName}.pdf`, 'application/pdf', pdfBytes);
@@ -355,7 +372,14 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Ac
                 : 'Paste the generated text here…'
             }
             value={pasted}
-            onChange={(e) => setPasted(e.target.value)}
+            onChange={(e) => {
+              setPasted(e.target.value);
+              if (promptType === 'resume') {
+                setOutcome(null);
+                setRenderProblems([]);
+                clearPreview();
+              }
+            }}
           />
           <button onClick={() => void runImport()} disabled={!pasted.trim() || !!busy}>
             {promptType === 'resume' ? 'Validate & review' : 'Review'}
