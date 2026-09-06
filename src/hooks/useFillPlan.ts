@@ -173,34 +173,15 @@ export function useFillPlan(state: PanelState) {
   const editValue = useCallback(
     (frameId: number, fieldId: string, text: string) => {
       mutateRow(frameId, fieldId, (row) => {
+        const instruction = userInstruction(row, frameId, text);
+        if (!instruction) return row; // file inputs take documents, not typed text
         if (!row.instruction) {
           // User is supplying a value where the profile had none.
-          const instruction: FillInstruction = {
-            fieldId,
-            frameId,
-            action: row.field.control === 'combobox' ? 'pickListbox' : 'setText',
-            value: text,
-            kind: row.kind,
-            source: 'user',
-            confidence: 1,
-            requiresReview: false,
-          };
           return { ...row, instruction, include: text.length > 0 };
-        }
-        let value: FillInstruction['value'] = text;
-        let action = row.instruction.action;
-        if (action === 'selectOption') {
-          const option = row.field.options?.find(
-            (o) => o.label.toLowerCase() === text.toLowerCase() || o.value === text,
-          );
-          value = option ? option.value : text;
-        }
-        if (action === 'setChecked') {
-          value = /^(yes|true|checked|1)$/i.test(text);
         }
         return {
           ...row,
-          instruction: { ...row.instruction, value, source: 'user', confidence: 1 },
+          instruction: { ...instruction, requiresReview: row.instruction.requiresReview },
           include: text.length > 0 ? row.include || !row.requiresReview : false,
         };
       });
@@ -242,6 +223,44 @@ export function useFillPlan(state: PanelState) {
   );
 
   return { profile, settings, resume: resume ?? null, plans, toggleInclude, editValue, editKind };
+}
+
+/**
+ * Build the instruction for a value the user typed into a review row. The
+ * action follows the CONTROL, not whatever the profile-derived instruction
+ * happened to be: a checkbox takes setChecked, a select/radio group takes the
+ * option whose label or value matches, a combobox goes through the listbox
+ * picker. The earlier version emitted setText for every control the profile
+ * had no value for, which on a checkbox or radio wrote the typed text into
+ * the element's `value` attribute — the form then submitted "yes" as the
+ * option value while the box stayed unchecked, and the readback reported ok.
+ */
+function userInstruction(row: ReviewRow, frameId: number, text: string): FillInstruction | null {
+  const base = {
+    fieldId: row.field.fieldId,
+    frameId,
+    kind: row.kind,
+    source: 'user' as const,
+    confidence: 1,
+    requiresReview: false,
+  };
+  switch (row.field.control) {
+    case 'file':
+      return null;
+    case 'checkbox':
+      return { ...base, action: 'setChecked', value: /^(yes|true|checked|1)$/i.test(text) };
+    case 'select':
+    case 'radio': {
+      const options = row.field.options ?? [];
+      if (options.length === 0) return { ...base, action: 'pickListbox', value: text };
+      const option = options.find((o) => o.value === text || o.label.toLowerCase() === text.toLowerCase());
+      return { ...base, action: 'selectOption', value: option ? option.value : text };
+    }
+    case 'combobox':
+      return { ...base, action: 'pickListbox', value: text };
+    default:
+      return { ...base, action: 'setText', value: text };
+  }
 }
 
 async function logUnmatched(
