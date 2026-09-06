@@ -1,6 +1,7 @@
 import { deepQuerySelectorAll } from './deepQuery';
 import { setNativeValue } from './setNativeValue';
-import { normalizeForSignature } from '../signature';
+import { containsTokens, normalizeForSignature } from '../signature';
+import { isUnavailable } from './isUnavailable';
 
 export interface ListboxPickResult {
   ok: boolean;
@@ -28,7 +29,7 @@ export async function pickFromListbox(
     click(trigger);
   }
 
-  const option = await waitForBestOption(targetText, timeoutMs);
+  const option = await waitForBestOption(trigger, targetText, timeoutMs);
   if (!option) return { ok: false, error: 'no matching option appeared' };
 
   click(option);
@@ -42,12 +43,19 @@ function click(el: HTMLElement): void {
   }
 }
 
-function waitForBestOption(targetText: string, timeoutMs: number): Promise<HTMLElement | null> {
+function waitForBestOption(trigger: HTMLElement, targetText: string, timeoutMs: number): Promise<HTMLElement | null> {
   return new Promise((resolve) => {
     const deadline = Date.now() + timeoutMs;
 
     const attempt = (): boolean => {
-      const options = deepQuerySelectorAll<HTMLElement>('[role="option"], [role="listbox"] li');
+      const ids = `${trigger.getAttribute('aria-controls') ?? ''} ${trigger.getAttribute('aria-owns') ?? ''}`.trim().split(/\s+/).filter(Boolean);
+      const root = trigger.getRootNode() as Document | ShadowRoot;
+      // A mounted dropdown belonging to a different field must never win.
+      const scopes: ParentNode[] = ids.length
+        ? ids.map((id) => root.getElementById(id) ?? document.getElementById(id)).filter((el): el is HTMLElement => el !== null)
+        : [document];
+      const options = scopes.flatMap((scope) => deepQuerySelectorAll<HTMLElement>('[role="option"], [role="listbox"] li', scope))
+        .filter((el) => !isUnavailable(el) && isVisibleOption(el));
       const best = rankOptions(options, targetText);
       if (best) {
         cleanup();
@@ -96,9 +104,20 @@ function rankOptions(options: HTMLElement[], targetText: string): HTMLElement | 
     if (!text) continue;
     let score = 0;
     if (text === target) score = 3;
-    else if (text.startsWith(target) || target.startsWith(text)) score = 2;
-    else if (text.includes(target) || target.includes(text)) score = 1;
+    else if (text.startsWith(`${target} `) || target.startsWith(`${text} `)) score = 2;
+    else if (containsTokens(text, target) || containsTokens(target, text)) score = 1;
     if (score > 0 && (!best || score > best.score)) best = { el, score };
   }
   return best?.el ?? null;
+}
+
+function isVisibleOption(el: HTMLElement): boolean {
+  let node: Element | null = el;
+  while (node) {
+    const style = getComputedStyle(node);
+    if (node.hasAttribute('hidden') || node.getAttribute('aria-hidden') === 'true' ||
+      style.display === 'none' || style.visibility === 'hidden') return false;
+    node = node.parentElement ?? (node.getRootNode() instanceof ShadowRoot ? (node.getRootNode() as ShadowRoot).host : null);
+  }
+  return true;
 }
