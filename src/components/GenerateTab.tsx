@@ -57,9 +57,14 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Ac
 
   useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
 
-  const job: JobContext | null = state.jd
-    ? { title: state.jd.title, text: state.jd.text, url: state.tabUrl }
-    : null;
+  // Memoized on its inputs: the match gap tokenizes up to 60k characters and
+  // the prompt serializes the whole profile, and both are keyed on this
+  // object. Rebuilding it every render made each keystroke in the paste box
+  // redo that work.
+  const job = useMemo<JobContext | null>(
+    () => (state.jd ? { title: state.jd.title, text: state.jd.text, url: state.tabUrl } : null),
+    [state.jd, state.tabUrl],
+  );
 
   const matchGap = useMemo(
     () => (job && profile ? computeMatchGap(job.text, profile) : null),
