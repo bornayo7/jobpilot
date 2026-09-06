@@ -25,7 +25,7 @@ export interface PanelState {
   frames: Map<number, FrameState>;
   /** fieldId -> latest fill result. */
   fillResults: Map<string, FillResult>;
-  jd: { title: string; text: string } | null;
+  jd: { title: string; text: string; frameId?: number } | null;
   /** Set by the right-click "fix this field" flow — FillTab scrolls to it. */
   focusField: { frameId: number; fieldId: string; at: number } | null;
 }
@@ -113,6 +113,7 @@ export function useBackgroundPort() {
         portRef.current?.postMessage({ t: 'panel/highlight', tabId, frameId, fieldId } satisfies PanelToBg);
       },
       extractJd(tabId: number) {
+        setState((prev) => prev.tabId === tabId ? { ...prev, jd: null } : prev);
         portRef.current?.postMessage({ t: 'panel/extractJd', tabId } satisfies PanelToBg);
       },
     }),
@@ -122,17 +123,20 @@ export function useBackgroundPort() {
   return { state, actions };
 }
 
-function reduce(prev: PanelState, msg: BgToPanel): PanelState {
+export function reduce(prev: PanelState, msg: BgToPanel): PanelState {
   switch (msg.t) {
     case 'bg/tabChanged': {
-      if (msg.tabId === prev.tabId) return { ...prev, tabUrl: msg.url || prev.tabUrl };
+      if (!msg.reset && msg.tabId === prev.tabId && (!msg.url || msg.url === prev.tabUrl)) {
+        return { ...prev, tabUrl: msg.url || prev.tabUrl };
+      }
       return { ...emptyState(), tabId: msg.tabId, tabUrl: msg.url };
     }
     case 'bg/frameGone': {
       if (msg.tabId !== prev.tabId) return prev;
       const frames = new Map(prev.frames);
       frames.delete(msg.frameId);
-      return { ...prev, frames };
+      return { ...prev, frames, ...(msg.frameId === 0 || prev.jd?.frameId === msg.frameId
+        ? { jd: null, fillResults: new Map(), focusField: null } : {}) };
     }
     case 'bg/frameEvent': {
       if (msg.tabId !== prev.tabId) return prev;
@@ -141,17 +145,19 @@ function reduce(prev: PanelState, msg: BgToPanel): PanelState {
       const event = msg.event;
       switch (event.t) {
         case 'cs/ready': {
-          frames.set(msg.frameId, { ...frame, atsId: event.atsId, url: event.url });
           // The top frame reporting a different URL is a navigation, full or
           // client-side. The extracted JD and the fill results described the
           // old page; carrying them over left the Generate tab building
           // prompts for the previous posting.
           const navigated = msg.frameId === 0 && !!event.url && !!prev.tabUrl && event.url !== prev.tabUrl;
+          const frameNavigated = !!frame.url && frame.url !== event.url;
+          if (navigated) frames.clear();
+          frames.set(msg.frameId, { ...frame, atsId: event.atsId, url: event.url, fields: navigated || frameNavigated ? [] : frame.fields });
           return {
             ...prev,
             frames,
             tabUrl: msg.frameId === 0 && event.url ? event.url : prev.tabUrl,
-            ...(navigated ? { jd: null, fillResults: new Map<string, FillResult>(), focusField: null } : {}),
+            ...(navigated || frameNavigated ? { jd: null, fillResults: new Map<string, FillResult>(), focusField: null } : {}),
           };
         }
         case 'cs/fields':
@@ -165,7 +171,7 @@ function reduce(prev: PanelState, msg: BgToPanel): PanelState {
         case 'cs/jdText': {
           // Keep the longest JD text across frames (top frame usually wins).
           if (prev.jd && prev.jd.text.length >= event.text.length) return prev;
-          return { ...prev, jd: { title: event.title, text: event.text } };
+          return { ...prev, jd: { title: event.title, text: event.text, frameId: msg.frameId } };
         }
         case 'cs/contextField':
           return { ...prev, focusField: { frameId: msg.frameId, fieldId: event.fieldId, at: Date.now() } };

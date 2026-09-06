@@ -171,6 +171,7 @@ export default defineBackground(() => {
       csPorts.set(key, port);
 
       port.onMessage.addListener((raw) => {
+        if (csPorts.get(key) !== port) return;
         const msg = raw as CsToBg;
         if (msg.t === 'cs/ready') {
           frameMeta.set(key, { atsId: msg.atsId, url: msg.url });
@@ -189,6 +190,9 @@ export default defineBackground(() => {
       });
 
       port.onDisconnect.addListener(() => {
+        // The replacement document may have connected before the old port's
+        // delayed disconnect event arrives. Only its owner may delete a slot.
+        if (csPorts.get(key) !== port) return;
         csPorts.delete(key);
         frameMeta.delete(key);
         for (const [panelPort, attached] of panelPorts) {
@@ -277,6 +281,17 @@ export default defineBackground(() => {
   // A closed tab can never produce the confirmation its attempt was waiting for.
   browser.tabs.onRemoved.addListener((tabId) => {
     pendingAttempts.delete(tabId);
+  });
+
+  // Navigation to an unenabled site never sends cs/ready. Clear the previous
+  // application's state as soon as navigation starts, including reloads.
+  browser.tabs.onUpdated.addListener((tabId, change) => {
+    if (change.status !== 'loading' && !change.url) return;
+    for (const [port, attached] of panelPorts) {
+      if (attached.tabId === tabId) {
+        sendToPanel(port, { t: 'bg/tabChanged', tabId, url: change.url ?? '', reset: true });
+      }
+    }
   });
 
   // Keep attached panels pointed at the tab the user is actually looking at —

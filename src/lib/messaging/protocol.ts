@@ -112,7 +112,7 @@ export type PanelToBg =
 export type BgToPanel =
   | { t: 'bg/frameEvent'; tabId: number; frameId: number; event: CsToBg }
   | { t: 'bg/frameGone'; tabId: number; frameId: number }
-  | { t: 'bg/tabChanged'; tabId: number; url: string };
+  | { t: 'bg/tabChanged'; tabId: number; url: string; reset?: boolean };
 
 export const CS_PORT = 'jobpilot-cs';
 export const PANEL_PORT = 'jobpilot-panel';

@@ -43,12 +43,16 @@ export function FillTab({ state, actions }: { state: PanelState; actions: Action
   // pre-fills the Generate tab's scan step. Keyed on the URL as well as the
   // tab so navigating to another posting in the same tab extracts again.
   useEffect(() => {
-    if (tabId === null || state.jd !== null || frameEntries.length === 0) return;
-    const key = `${tabId}|${state.tabUrl}`;
+    if (tabId === null || frameEntries.length === 0) {
+      jdRequestedFor.current = null;
+      return;
+    }
+    if (state.jd !== null) return;
+    const key = JSON.stringify([tabId, state.tabUrl, frameEntries.map(([id, frame]) => [id, frame.url])]);
     if (jdRequestedFor.current === key) return;
     jdRequestedFor.current = key;
     actions.extractJd(tabId);
-  }, [tabId, state.tabUrl, state.jd, frameEntries.length, actions]);
+  }, [tabId, state.tabUrl, state.jd, state.frames, actions]);
 
   // Duplicate-application guard: have you applied to this company before?
   useEffect(() => {
