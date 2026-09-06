@@ -202,7 +202,7 @@ export function FillTab({ state, actions }: { state: PanelState; actions: Action
 
       {includedCount > 0 && (
         <div className="save-bar">
-          <button className="primary" onClick={fillAll} disabled={filling}>
+          <button className="primary" onClick={fillAll} disabled={filling || resolving}>
             {filling ? 'Filling…' : `Fill ${includedCount} field${includedCount === 1 ? '' : 's'}`}
           </button>
           <span className="hint" style={{ alignSelf: 'center' }}>

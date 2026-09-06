@@ -23,10 +23,13 @@ export function useFillPlan(state: PanelState) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   /** `undefined` = lookup for the current profile still in flight. */
-  const [resume, setResume] = useState<ResumeMeta | null | undefined>(undefined);
+  const [resumeLookup, setResumeLookup] = useState<{ profile: Profile; value: ResumeMeta | null } | null>(null);
+  const resume = resumeLookup?.profile === profile ? resumeLookup?.value : undefined;
   const [plans, setPlans] = useState<Map<number, FramePlan>>(new Map());
-  const resolveKeys = useRef<Map<number, string>>(new Map());
-  const resolveInputs = useRef<{ profile: Profile; settings: Settings; resume: ResumeMeta | null } | null>(null);
+  const resolveKeys = useRef<Map<number, { key: string; token: symbol }>>(new Map());
+  const resolveInputs = useRef<unknown[]>([]);
+
+  useEffect(() => () => resolveKeys.current.clear(), []);
 
   useEffect(() => {
     void loadProfile().then(setProfile);
@@ -46,12 +49,11 @@ export function useFillPlan(state: PanelState) {
     if (!profile) return;
     const id = profile.documents.defaultResumeId;
     if (!id) {
-      setResume(null);
+      setResumeLookup({ profile, value: null });
       return;
     }
     // Hold resolution until the lookup lands: resolving with a not-yet-loaded
     // resume would produce a plan with no file attachment.
-    setResume(undefined);
     let cancelled = false;
     void listDocuments().then((docs) => {
       if (cancelled) return;
@@ -60,10 +62,10 @@ export function useFillPlan(state: PanelState) {
       // real application is worse than attaching nothing. A dangling default
       // surfaces as the "no default resume" warning instead.
       const doc = docs.find((d) => d.id === id) ?? null;
-      // Keep the same reference when nothing changed so dependents don't re-run.
-      setResume((prev) =>
-        doc ? (prev && prev.blobId === doc.id && prev.filename === doc.name ? prev : { blobId: doc.id, filename: doc.name }) : null,
-      );
+      setResumeLookup({ profile, value: doc ? { blobId: doc.id, filename: doc.name } : null });
+    }).catch((err) => {
+      console.error('[jobpilot] resume lookup failed', err);
+      if (!cancelled) setResumeLookup({ profile, value: null });
     });
     return () => {
       cancelled = true;
@@ -77,12 +79,21 @@ export function useFillPlan(state: PanelState) {
   // happened to re-render its form, and profile edits made in the options page
   // never reached an open panel.
   useEffect(() => {
-    if (!profile || !settings || resume === undefined) return;
-    const previous = resolveInputs.current;
-    if (!previous || previous.profile !== profile || previous.settings !== settings || previous.resume !== resume) {
-      resolveInputs.current = { profile, settings, resume };
+    const inputs = [state.tabId, profile, settings, resume];
+    if (inputs.some((value, index) => resolveInputs.current[index] !== value)) {
+      resolveInputs.current = inputs;
       resolveKeys.current.clear();
+      setPlans(new Map());
     }
+    // Invalidate even while a replacement profile's resume is loading.
+    for (const frameId of resolveKeys.current.keys()) {
+      if (!state.frames.get(frameId)?.fields.length) resolveKeys.current.delete(frameId);
+    }
+    setPlans((prev) => {
+      const next = new Map([...prev].filter(([id]) => state.frames.get(id)?.fields.length));
+      return next.size === prev.size ? prev : next;
+    });
+    if (!profile || !settings || resume === undefined) return;
     // A key configured for the mapping provider (or a local provider) enables tier 4.
     const llmEnabled =
       (settings.routing.mapping.provider === 'anthropic' && !!settings.anthropicKey) ||
@@ -93,18 +104,19 @@ export function useFillPlan(state: PanelState) {
 
     for (const [frameId, frame] of state.frames) {
       if (frame.fields.length === 0) continue;
-      const key = frame.fields.map((f) => `${f.fieldId}:${f.signature}:${f.currentValue ?? ''}`).join('|');
-      if (resolveKeys.current.get(frameId) === key) continue;
-      resolveKeys.current.set(frameId, key);
+      const key = JSON.stringify([frame.url, frame.atsId, frame.fields]);
+      if (resolveKeys.current.get(frameId)?.key === key) continue;
+      const token = Symbol();
+      resolveKeys.current.set(frameId, { key, token });
+      const isCurrent = () => resolveKeys.current.get(frameId)?.token === token;
 
       setPlans((prev) => {
         const next = new Map(prev);
-        const existing = next.get(frameId);
         next.set(frameId, {
-          rows: existing?.rows ?? [],
-          unmatched: existing?.unmatched ?? [],
+          rows: [],
+          unmatched: [],
           resolving: true,
-          llmCalls: existing?.llmCalls ?? 0,
+          llmCalls: 0,
         });
         return next;
       });
@@ -121,7 +133,7 @@ export function useFillPlan(state: PanelState) {
       })
         .then(async (outcome) => {
           // Stale check: fields changed again while resolving.
-          if (resolveKeys.current.get(frameId) !== key) return;
+          if (!isCurrent()) return;
           setPlans((prev) => {
             const next = new Map(prev);
             next.set(frameId, { ...outcome, resolving: false });
@@ -130,6 +142,7 @@ export function useFillPlan(state: PanelState) {
           await logUnmatched(frame.atsId, frame.url, outcome);
         })
         .catch((err) => {
+          if (!isCurrent()) return;
           console.error('[jobpilot] resolve failed', err);
           setPlans((prev) => {
             const next = new Map(prev);
@@ -152,7 +165,7 @@ export function useFillPlan(state: PanelState) {
       }
       return changed ? next : prev;
     });
-  }, [state.frames, profile, settings, resume]);
+  }, [state.tabId, state.frames, profile, settings, resume]);
 
   const mutateRow = useCallback(
     (frameId: number, fieldId: string, mutate: (row: ReviewRow) => ReviewRow) => {
