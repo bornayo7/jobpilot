@@ -16,6 +16,16 @@ const MAX_ENTRIES = 2000;
 
 type CacheShape = Record<string, MappingEntry>;
 
+let pending: Promise<unknown> = Promise.resolve();
+
+async function withCacheLock<T>(operation: () => Promise<T>): Promise<T> {
+  if (globalThis.navigator?.locks) return await navigator.locks.request(KEY, operation);
+  // Also serialize callers in environments without the Web Locks API.
+  const result = pending.then(operation, operation);
+  pending = result.then(() => undefined, () => undefined);
+  return result;
+}
+
 async function readAll(): Promise<CacheShape> {
   const stored = await browser.storage.local.get(KEY);
   return (stored[KEY] as CacheShape | undefined) ?? {};
@@ -27,6 +37,10 @@ async function writeAll(cache: CacheShape): Promise<void> {
 
 /** Batch lookup; bumps hit counters for found entries. */
 export async function cacheGet(signatures: string[]): Promise<Map<string, MappingEntry>> {
+  return withCacheLock(() => readAndTouch(signatures));
+}
+
+async function readAndTouch(signatures: string[]): Promise<Map<string, MappingEntry>> {
   const cache = await readAll();
   const found = new Map<string, MappingEntry>();
   let touched = false;
@@ -52,6 +66,12 @@ export async function cacheSet(
   entries: { signature: string; entry: Omit<MappingEntry, 'createdAt' | 'lastHit' | 'hits'> }[],
 ): Promise<void> {
   if (entries.length === 0) return;
+  // All extension pages share this lock. Otherwise a hit-counter write from
+  // one frame can overwrite another frame's newly saved manual correction.
+  await withCacheLock(() => writeEntries(entries));
+}
+
+async function writeEntries(entries: Parameters<typeof cacheSet>[0]): Promise<void> {
   const cache = await readAll();
   const now = Date.now();
 

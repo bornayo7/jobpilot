@@ -31,4 +31,20 @@ describe('mappingCache', () => {
     const cached = await cacheGet(['sig1']);
     expect(cached.get('sig1')).toMatchObject({ kind: 'comp.expectedSalary', source: 'user-correction' });
   });
+
+  it('keeps simultaneous frame writes instead of letting the last snapshot win', async () => {
+    await Promise.all(Array.from({ length: 12 }, (_, i) => cacheSet([
+      { signature: `s${i}`, entry: { kind: 'question.freeText', confidence: 1, source: 'user-correction' } },
+    ])));
+    expect((await cacheGet(Array.from({ length: 12 }, (_, i) => `s${i}`))).size).toBe(12);
+  });
+
+  it('does not erase a correction while another lookup updates hit counters', async () => {
+    await cacheSet([{ signature: 'old', entry: { kind: 'question.freeText', confidence: 0.8, source: 'llm' } }]);
+    await Promise.all([
+      cacheGet(['old']),
+      cacheSet([{ signature: 'new', entry: { kind: 'name.first', confidence: 1, source: 'user-correction' } }]),
+    ]);
+    expect((await cacheGet(['old', 'new'])).size).toBe(2);
+  });
 });
