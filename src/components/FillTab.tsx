@@ -277,17 +277,11 @@ function FramePlanView({
       {reviewRows.map(renderRow)}
       {plan.unmatched.length > 0 && (
         <>
-          <div className="frame-header">Unrecognized (fill by hand)</div>
-          {plan.unmatched.map((field) => (
-            <div className="field-row unmatched" key={field.fieldId} onMouseEnter={() => onHover(field.fieldId)}>
-              <div className="field-main">
-                <span className="field-label">{field.label || field.name || '(unlabeled)'}</span>
-              </div>
-              <div className="field-meta">
-                <span className="chip">{field.control}</span>
-              </div>
-            </div>
-          ))}
+          <div className="frame-header">Unrecognized — choose a mapping or enter a value</div>
+          {plan.unmatched.map((field) => renderRow({
+            field, kind: 'unknown', source: 'none', confidence: 0,
+            instruction: null, include: false, requiresReview: true, sensitive: false,
+          }))}
         </>
       )}
     </Fragment>

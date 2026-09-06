@@ -172,10 +172,16 @@ export function useFillPlan(state: PanelState) {
       setPlans((prev) => {
         const plan = prev.get(frameId);
         if (!plan) return prev;
+        const unmatched = plan.unmatched.find((field) => field.fieldId === fieldId);
+        const promoted: ReviewRow | null = unmatched ? {
+          field: unmatched, kind: 'unknown', source: 'none', confidence: 0,
+          instruction: null, include: false, requiresReview: true, sensitive: false,
+        } : null;
         const next = new Map(prev);
         next.set(frameId, {
           ...plan,
-          rows: plan.rows.map((row) => (row.field.fieldId === fieldId ? mutate(row) : row)),
+          rows: promoted ? [...plan.rows, mutate(promoted)] : plan.rows.map((row) => (row.field.fieldId === fieldId ? mutate(row) : row)),
+          unmatched: plan.unmatched.filter((field) => field.fieldId !== fieldId),
         });
         return next;
       });
@@ -232,10 +238,11 @@ export function useFillPlan(state: PanelState) {
         return { ...row, kind, source: 'user', confidence: 1, instruction, requiresReview, sensitive, include: instruction !== null && !requiresReview };
       });
       // A manual correction permanently shadows any LLM cache entry.
-      const row = plans.get(frameId)?.rows.find((r) => r.field.fieldId === fieldId);
-      if (row) {
+      const plan = plans.get(frameId);
+      const field = plan?.rows.find((r) => r.field.fieldId === fieldId)?.field ?? plan?.unmatched.find((f) => f.fieldId === fieldId);
+      if (field) {
         void cacheSet([
-          { signature: row.field.signature, entry: { kind, confidence: 1, source: 'user-correction' } },
+          { signature: field.signature, entry: { kind, confidence: 1, source: 'user-correction' } },
         ]);
       }
     },

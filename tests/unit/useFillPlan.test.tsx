@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -18,6 +19,7 @@ vi.mock('@lib/storage/settingsStore', async (original) => ({
   watchSettings: () => () => {},
 }));
 import { useFillPlan } from '@hooks/useFillPlan';
+import { cacheGet } from '@lib/storage/mappingCache';
 
 let root: Root;
 let container: HTMLDivElement;
@@ -64,4 +66,16 @@ it('removes a plan when its frame becomes empty and ignores the pending result',
   await act(async () => root.render(<Harness state={empty} />));
   await act(async () => pending.resolve(outcome(1)));
   expect(latest.plans.size).toBe(0);
+});
+
+it('turns an unrecognized field into an editable mapped row and remembers the correction', async () => {
+  const page = state(); const field = page.frames.get(0)!.fields[0]!;
+  mocks.resolve.mockResolvedValue({ rows: [], unmatched: [field], llmCalls: 0 });
+  await act(async () => root.render(<Harness state={page} />));
+  await act(async () => latest.editKind(0, field.fieldId, 'name.first'));
+  expect(latest.plans.get(0)!.unmatched).toEqual([]);
+  expect(latest.plans.get(0)!.rows[0]!.kind).toBe('name.first');
+  await act(async () => latest.editValue(0, field.fieldId, 'Ada'));
+  expect(latest.plans.get(0)!.rows[0]!.instruction?.value).toBe('Ada');
+  expect((await cacheGet([field.signature])).get(field.signature)?.source).toBe('user-correction');
 });
