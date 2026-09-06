@@ -39,6 +39,13 @@ describe('migrateProfile', () => {
 });
 
 describe('validateProfile', () => {
+  it('rejects unrelated JSON objects and profiles from a future version', () => {
+    expect(validateProfile({}).ok).toBe(false);
+    expect(validateProfile({ theme: 'dark', apiKey: 'example' }).ok).toBe(false);
+    expect(validateProfile({ schemaVersion: 1 }).ok).toBe(false);
+    expect(validateProfile({ ...emptyProfile(), schemaVersion: CURRENT_SCHEMA_VERSION + 1 }).ok).toBe(false);
+    expect(validateProfile(emptyProfile()).ok).toBe(true);
+  });
   it('accepts what migrateProfile accepts', () => {
     const result = validateProfile({ basics: { firstName: 'Ada' } });
     expect(result.ok).toBe(true);

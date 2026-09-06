@@ -31,7 +31,15 @@ export function validateProfile(raw: unknown): ProfileValidation {
   }
 
   let data = raw as Record<string, unknown>;
+  // Zod defaults accept any object after stripping unknown keys. A settings
+  // export or {} must not become an empty profile one Save away from data loss.
+  if (!Object.keys(ProfileSchema.shape).some((key) => key !== 'schemaVersion' && Object.hasOwn(data, key))) {
+    return { ok: false, errors: ['(root): no recognized profile sections'] };
+  }
   const version = typeof data.schemaVersion === 'number' ? data.schemaVersion : 0;
+  if (version > CURRENT_SCHEMA_VERSION) {
+    return { ok: false, errors: [`schemaVersion: version ${version} requires a newer JobPilot`] };
+  }
 
   // Version 0 = pre-versioned or missing; just stamp the current version and
   // let zod defaults fill any gaps. Future migrations chain here:
