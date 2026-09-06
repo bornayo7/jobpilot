@@ -159,7 +159,13 @@ export default defineContentScript({
     // then throws on every call, so back off and give up rather than spinning at
     // 500ms forever on a page the user is still reading.
     const RECONNECT_DELAYS_MS = [500, 1_000, 2_000, 5_000, 10_000];
+    // A connection only counts as healthy once it has stayed up this long.
+    // connect() can succeed synchronously and then disconnect a moment later
+    // (worker failing to start, extension mid-update); resetting the backoff
+    // on connect alone turned that into a 500ms loop with no exit.
+    const STABLE_AFTER_MS = 5_000;
     let reconnectAttempt = 0;
+    let stableTimer: ReturnType<typeof setTimeout> | undefined;
 
     const scheduleReconnect = () => {
       const delay = RECONNECT_DELAYS_MS[reconnectAttempt];
@@ -179,13 +185,17 @@ export default defineContentScript({
       }
       port.onMessage.addListener(handleMessage);
       port.onDisconnect.addListener(() => {
+        clearTimeout(stableTimer);
         port = null;
         stopObserving?.();
         stopObserving = null;
         scheduleReconnect();
       });
 
-      reconnectAttempt = 0;
+      clearTimeout(stableTimer);
+      stableTimer = setTimeout(() => {
+        reconnectAttempt = 0;
+      }, STABLE_AFTER_MS);
       post({ t: 'cs/ready', atsId, url: location.href });
       scanAndReport();
       stopObserving = observeFields(scanAndReport);
