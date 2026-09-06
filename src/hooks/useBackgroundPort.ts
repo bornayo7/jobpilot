@@ -140,13 +140,20 @@ function reduce(prev: PanelState, msg: BgToPanel): PanelState {
       const frame: FrameState = frames.get(msg.frameId) ?? { atsId: null, url: '', fields: [] };
       const event = msg.event;
       switch (event.t) {
-        case 'cs/ready':
+        case 'cs/ready': {
           frames.set(msg.frameId, { ...frame, atsId: event.atsId, url: event.url });
+          // The top frame reporting a different URL is a navigation, full or
+          // client-side. The extracted JD and the fill results described the
+          // old page; carrying them over left the Generate tab building
+          // prompts for the previous posting.
+          const navigated = msg.frameId === 0 && !!event.url && !!prev.tabUrl && event.url !== prev.tabUrl;
           return {
             ...prev,
             frames,
             tabUrl: msg.frameId === 0 && event.url ? event.url : prev.tabUrl,
+            ...(navigated ? { jd: null, fillResults: new Map<string, FillResult>(), focusField: null } : {}),
           };
+        }
         case 'cs/fields':
           frames.set(msg.frameId, { ...frame, fields: event.fields });
           return { ...prev, frames };

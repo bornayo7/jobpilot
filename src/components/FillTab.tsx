@@ -26,7 +26,8 @@ export function FillTab({ state, actions }: { state: PanelState; actions: Action
   const [enableHint, setEnableHint] = useState('');
   const [answerBank, setAnswerBank] = useState<AnswerRecord[]>([]);
   const [previousApps, setPreviousApps] = useState<TrackerJob[]>([]);
-  const jdRequestedFor = useRef<number | null>(null);
+  /** `${tabId}|${url}` the JD was last requested for — once per page, not per tab. */
+  const jdRequestedFor = useRef<string | null>(null);
 
   const { tabId, frames } = state;
   const frameEntries = [...frames.entries()].sort(([a], [b]) => a - b);
@@ -38,14 +39,16 @@ export function FillTab({ state, actions }: { state: PanelState; actions: Action
     void listAnswers().then(setAnswerBank);
   }, [state.tabUrl]);
 
-  // Auto-extract the JD once per tab: powers dealbreaker warnings here and
-  // pre-fills the Generate tab's scan step.
+  // Auto-extract the JD once per page: powers dealbreaker warnings here and
+  // pre-fills the Generate tab's scan step. Keyed on the URL as well as the
+  // tab so navigating to another posting in the same tab extracts again.
   useEffect(() => {
     if (tabId === null || state.jd !== null || frameEntries.length === 0) return;
-    if (jdRequestedFor.current === tabId) return;
-    jdRequestedFor.current = tabId;
+    const key = `${tabId}|${state.tabUrl}`;
+    if (jdRequestedFor.current === key) return;
+    jdRequestedFor.current = key;
     actions.extractJd(tabId);
-  }, [tabId, state.jd, frameEntries.length, actions]);
+  }, [tabId, state.tabUrl, state.jd, frameEntries.length, actions]);
 
   // Duplicate-application guard: have you applied to this company before?
   useEffect(() => {

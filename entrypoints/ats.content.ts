@@ -37,6 +37,9 @@ export default defineContentScript({
     let stopObserving: (() => void) | null = null;
     let confirmationSent = false;
     let lastContextTarget: Element | null = null;
+    /** URL (minus hash) last reported to the hub. SPAs change it without a
+     *  reload, so it is re-checked on every scan. */
+    let announcedUrl = '';
 
     const post = (msg: CsToBg) => {
       try {
@@ -44,6 +47,13 @@ export default defineContentScript({
       } catch {
         // Port died mid-send; reconnect loop below handles it.
       }
+    };
+
+    const pageUrl = () => location.href.replace(/#.*$/, '');
+
+    const announce = () => {
+      announcedUrl = pageUrl();
+      post({ t: 'cs/ready', atsId, url: location.href });
     };
 
     const checkConfirmation = () => {
@@ -61,6 +71,13 @@ export default defineContentScript({
     };
 
     const scanAndReport = () => {
+      if (pageUrl() !== announcedUrl) {
+        // Client-side navigation. To the panel this is a new page: the JD
+        // text and fill results belonged to the old one, and a second
+        // application in the same tab needs its own confirmation.
+        confirmationSent = false;
+        announce();
+      }
       const fields = discoverFields(atsId);
       post({ t: 'cs/fields', fields });
       checkConfirmation();
@@ -196,7 +213,7 @@ export default defineContentScript({
       stableTimer = setTimeout(() => {
         reconnectAttempt = 0;
       }, STABLE_AFTER_MS);
-      post({ t: 'cs/ready', atsId, url: location.href });
+      announce();
       scanAndReport();
       stopObserving = observeFields(scanAndReport);
     }
