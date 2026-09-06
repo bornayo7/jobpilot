@@ -32,9 +32,11 @@ export function FillTab({ state, actions }: { state: PanelState; actions: Action
   const frameEntries = [...frames.entries()].sort(([a], [b]) => a - b);
   const detected = frameEntries.find(([, f]) => f.atsId !== null)?.[1].atsId ?? null;
 
+  // Reload the bank per page: the tab stays mounted across tab switches now,
+  // and answers saved in the Answers tab should suggest on the next form.
   useEffect(() => {
     void listAnswers().then(setAnswerBank);
-  }, []);
+  }, [state.tabUrl]);
 
   // Auto-extract the JD once per tab: powers dealbreaker warnings here and
   // pre-fills the Generate tab's scan step.

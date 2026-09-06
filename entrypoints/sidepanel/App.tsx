@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useBackgroundPort } from '@hooks/useBackgroundPort';
 import { FillTab } from '@components/FillTab';
 import { GenerateTab } from '@components/GenerateTab';
@@ -13,6 +13,11 @@ export function App() {
   const [tab, setTab] = useState<Tab>('Fill');
   const { state, actions } = useBackgroundPort();
 
+  // Right-click "fix this field's mapping" lands on the Fill tab's row.
+  useEffect(() => {
+    if (state.focusField) setTab('Fill');
+  }, [state.focusField]);
+
   return (
     <div className="app">
       <nav className="tabs">
@@ -26,12 +31,26 @@ export function App() {
           </button>
         ))}
       </nav>
+      {/* Every tab stays mounted; only the active one is shown. Unmounting
+          threw away the Fill tab's reviewed plan (and re-ran the resolver,
+          model call included) and the Generate tab's pasted draft every time
+          the user glanced at another tab. */}
       <main className="content">
-        {tab === 'Fill' && <FillTab state={state} actions={actions} />}
-        {tab === 'Generate' && <GenerateTab state={state} actions={actions} />}
-        {tab === 'Tracker' && <TrackerTab />}
-        {tab === 'Answers' && <AnswersTab />}
-        {tab === 'Settings' && <SettingsTab />}
+        <div hidden={tab !== 'Fill'}>
+          <FillTab state={state} actions={actions} />
+        </div>
+        <div hidden={tab !== 'Generate'}>
+          <GenerateTab state={state} actions={actions} />
+        </div>
+        <div hidden={tab !== 'Tracker'}>
+          <TrackerTab active={tab === 'Tracker'} />
+        </div>
+        <div hidden={tab !== 'Answers'}>
+          <AnswersTab active={tab === 'Answers'} />
+        </div>
+        <div hidden={tab !== 'Settings'}>
+          <SettingsTab />
+        </div>
       </main>
     </div>
   );

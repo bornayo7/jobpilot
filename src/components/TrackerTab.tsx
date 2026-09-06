@@ -25,18 +25,21 @@ const STATUSES: { value: JobStatus; label: string }[] = [
  * after you click Submit — grouped by status with follow-up reminders on top.
  * Follow-up/thank-you drafts go through the Prompt Studio copy-paste flow.
  */
-export function TrackerTab() {
+export function TrackerTab({ active = true }: { active?: boolean }) {
   const [jobs, setJobs] = useState<TrackerJob[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [copiedId, setCopiedId] = useState('');
 
   const refresh = () => void listJobs().then(setJobs);
+  // The tab stays mounted while hidden; reload when it comes into view so
+  // applications recorded meanwhile show up.
   useEffect(() => {
+    if (!active) return;
     refresh();
     void loadProfile().then(setProfile);
     void loadSettings().then(setSettings);
-  }, []);
+  }, [active]);
 
   const due = dueFollowUps(jobs);
 

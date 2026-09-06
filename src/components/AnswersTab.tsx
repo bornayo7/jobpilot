@@ -13,14 +13,18 @@ import {
  * `reusable` gates whether an answer can be suggested on OTHER companies'
  * applications — the anti-answer-bleed control.
  */
-export function AnswersTab() {
+export function AnswersTab({ active = true }: { active?: boolean }) {
   const [bank, setBank] = useState<AnswerRecord[]>([]);
   const [filter, setFilter] = useState('');
   const [newQuestion, setNewQuestion] = useState('');
   const [newAnswer, setNewAnswer] = useState('');
 
   const refresh = () => void listAnswers().then(setBank);
-  useEffect(refresh, []);
+  // The tab stays mounted while hidden; reload when it comes into view so
+  // answers captured at submit time show up.
+  useEffect(() => {
+    if (active) refresh();
+  }, [active]);
 
   const visible = bank.filter((record) => {
     if (!filter.trim()) return true;
