@@ -1,6 +1,12 @@
 import { browser } from '#imports';
 import { getDb } from '../storage/db';
 import { arrayBufferToBase64, base64ToUint8Array } from './base64';
+import { z } from 'zod';
+import { ProfileSchema } from '../schema/profile';
+import { ResumeVersionSchema } from '../schema/resumeVersion';
+import { SettingsSchema } from '../storage/settingsStore';
+import { loadContainer } from '../storage/profileStore';
+import { ALL_FIELD_KINDS, type FieldKind } from '../schema/fieldKind';
 
 /**
  * Gather/restore everything JobPilot stores. Restore is replace-all — the
@@ -16,6 +22,8 @@ export interface BackupPayload {
 }
 
 export async function gatherBackupPayload(): Promise<BackupPayload> {
+  // Include the legacy profile on the first export, before any editor opens.
+  await loadContainer();
   const local = await browser.storage.local.get([...LOCAL_KEYS]);
   const db = await getDb();
   const idb: Record<string, unknown[]> = {};
@@ -30,25 +38,108 @@ export async function gatherBackupPayload(): Promise<BackupPayload> {
 }
 
 export async function restoreBackupPayload(payload: BackupPayload): Promise<void> {
-  if (!payload || typeof payload !== 'object' || !payload.idb || !payload.local) {
-    throw new Error('Backup payload is malformed');
-  }
-  await browser.storage.local.set(payload.local);
-
+  // Decode and validate EVERY store before the first destructive write.
+  const next = validatePayload(payload);
+  const previous = await gatherBackupPayload();
   const db = await getDb();
-  for (const store of IDB_STORES) {
-    const rows = payload.idb[store] ?? [];
-    const tx = db.transaction(store, 'readwrite');
-    await tx.store.clear();
-    for (const raw of rows) {
-      const row: any = raw;
-      const restored =
-        store === 'blobs' && row.__b64
-          ? { ...row, bytes: base64ToUint8Array(row.bytes).buffer, __b64: undefined }
-          : row;
-      delete restored.__b64;
-      await tx.store.put(restored);
-    }
-    await tx.done;
+  await replaceIdb(next.idb);
+  try {
+    await replaceLocal(next.local);
+  } catch (error) {
+    // IndexedDB and chrome.storage cannot share a transaction. Compensate for
+    // a local-storage failure so an ordinary failed restore keeps the old data.
+    await replaceIdb(decodeBlobs(previous.idb));
+    await replaceLocal(previous.local);
+    throw error;
   }
+
+  async function replaceIdb(rows: Record<string, unknown[]>) {
+    const tx = db.transaction([...IDB_STORES], 'readwrite');
+    // An abort may reject done while an individual request is still awaited.
+    void tx.done.catch(() => undefined);
+    try {
+      for (const store of IDB_STORES) {
+        const target = tx.objectStore(store);
+        await target.clear();
+        for (const row of rows[store]!) await target.put(row as never);
+      }
+      await tx.done;
+    } catch (error) {
+      try { tx.abort(); } catch { /* already aborted */ }
+      await tx.done.catch(() => undefined);
+      throw error;
+    }
+  }
+}
+
+async function replaceLocal(local: Record<string, unknown>) {
+  await browser.storage.local.set(Object.fromEntries(Object.entries(local).filter(([, value]) => value !== undefined)));
+  await browser.storage.local.remove(LOCAL_KEYS.filter((key) => local[key] === undefined));
+}
+
+const id = z.string().min(1);
+const timestamp = z.number().finite().nonnegative();
+const record = { id, createdAt: timestamp };
+const schemas = {
+  blobs: z.object({ ...record, name: z.string(), type: z.string(), bytes: z.string(), __b64: z.literal(true) }),
+  resumeVersions: z.object({
+    ...record, kind: z.enum(['resume', 'coverLetter']), label: z.string(), company: z.string(),
+    jobUrl: z.string().optional(), pdfBlobId: id.optional(), docxBlobId: id.optional(),
+    data: z.union([ResumeVersionSchema, z.object({ text: z.string() })]),
+  }).refine((row) => row.kind === 'resume'
+    ? ResumeVersionSchema.safeParse(row.data).success
+    : z.object({ text: z.string() }).safeParse(row.data).success, 'Version data does not match its kind'),
+  answers: z.object({
+    ...record, questionRaw: z.string(), questionNormalized: z.string(), answer: z.string(),
+    jobId: z.string(), company: z.string(), reusable: z.boolean(),
+  }),
+  trackerJobs: z.object({
+    ...record, company: z.string(), title: z.string(), url: z.string(), notes: z.string(),
+    status: z.enum(['applied', 'interviewing', 'offer', 'rejected', 'saved']),
+    resumeVersionId: id.optional(), resumeName: z.string().optional(),
+    appliedAt: timestamp.optional(), followUpAt: timestamp.optional(),
+  }),
+  unmatchedLog: z.object({
+    id, atsId: z.string().nullable(), url: z.string(), label: z.string(),
+    control: z.string(), signature: z.string(), seenAt: timestamp,
+  }),
+};
+
+function validatePayload(raw: unknown) {
+  const parsed = z.object({
+    exportedAt: timestamp,
+    local: z.object({
+      'jobpilot:profiles': z.object({
+        activeId: id,
+        profiles: z.record(z.object({ name: z.string(), profile: ProfileSchema })),
+      }).refine((c) => Object.hasOwn(c.profiles, c.activeId), 'Active profile is missing'),
+      'jobpilot:settings': SettingsSchema.optional(),
+      'jobpilot:mappingCache': z.record(z.object({
+        kind: z.string().refine((kind) => ALL_FIELD_KINDS.includes(kind as FieldKind)),
+        confidence: z.number().min(0).max(1), source: z.enum(['llm', 'user-correction']),
+        model: z.string().optional(), createdAt: timestamp, lastHit: timestamp, hits: timestamp,
+      })).optional(),
+    }).strict(),
+    idb: z.object({
+      blobs: z.array(schemas.blobs), resumeVersions: z.array(schemas.resumeVersions),
+      answers: z.array(schemas.answers), trackerJobs: z.array(schemas.trackerJobs),
+      unmatchedLog: z.array(schemas.unmatchedLog),
+    }).strict(),
+  }).safeParse(raw);
+  if (!parsed.success) throw new Error(`Backup payload is malformed: ${parsed.error.issues.map((i) => i.path.join('.')).join(', ')}`);
+  for (const store of IDB_STORES) {
+    const rows = parsed.data.idb[store];
+    if (new Set(rows.map((row) => row.id)).size !== rows.length) throw new Error(`Duplicate ids in backup store: ${store}`);
+  }
+  return { local: parsed.data.local, idb: decodeBlobs(parsed.data.idb) };
+}
+
+function decodeBlobs(idb: Record<string, unknown[]>): Record<string, unknown[]> {
+  return {
+    ...idb,
+    blobs: idb.blobs!.map((raw) => {
+      const { __b64, bytes, ...meta } = raw as z.infer<typeof schemas.blobs>;
+      return { ...meta, bytes: base64ToUint8Array(bytes).buffer };
+    }),
+  };
 }
