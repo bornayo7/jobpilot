@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PanelState } from './useBackgroundPort';
 import type { Profile } from '@lib/schema/profile';
 import { loadProfile, watchProfile } from '@lib/storage/profileStore';
-import { loadSettings, type Settings } from '@lib/storage/settingsStore';
+import { loadSettings, watchSettings, type Settings } from '@lib/storage/settingsStore';
 import { listDocuments } from '@lib/storage/documents';
 import { getDb } from '@lib/storage/db';
 import { resolveFields, type ResolveOutcome, type ReviewRow } from '@lib/fill/resolver';
@@ -31,7 +31,14 @@ export function useFillPlan(state: PanelState) {
   useEffect(() => {
     void loadProfile().then(setProfile);
     void loadSettings().then(setSettings);
-    return watchProfile(setProfile);
+    const unwatchProfile = watchProfile(setProfile);
+    // Settings saved in the Settings tab (a key added, routing changed, a
+    // dealbreaker toggled) must reach the plan without reopening the panel.
+    const unwatchSettings = watchSettings(setSettings);
+    return () => {
+      unwatchProfile();
+      unwatchSettings();
+    };
   }, []);
 
   // Resolve the default resume's display name once profile + docs are known.

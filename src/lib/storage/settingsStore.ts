@@ -50,10 +50,24 @@ const KEY = 'jobpilot:settings';
 
 export async function loadSettings(): Promise<Settings> {
   const stored = await browser.storage.local.get(KEY);
-  const parsed = SettingsSchema.safeParse(stored[KEY] ?? {});
-  return parsed.success ? parsed.data : SettingsSchema.parse({});
+  return parseSettings(stored[KEY]);
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {
   await browser.storage.local.set({ [KEY]: settings });
+}
+
+/** Fires whenever settings are saved from any extension page. */
+export function watchSettings(cb: (settings: Settings) => void): () => void {
+  const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
+    if (area !== 'local' || !changes[KEY]) return;
+    cb(parseSettings(changes[KEY].newValue));
+  };
+  browser.storage.onChanged.addListener(listener);
+  return () => browser.storage.onChanged.removeListener(listener);
+}
+
+function parseSettings(raw: unknown): Settings {
+  const parsed = SettingsSchema.safeParse(raw ?? {});
+  return parsed.success ? parsed.data : SettingsSchema.parse({});
 }

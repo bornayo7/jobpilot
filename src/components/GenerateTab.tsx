@@ -3,7 +3,7 @@ import type { PanelState } from '@hooks/useBackgroundPort';
 import type { PanelToBg } from '@lib/messaging/protocol';
 import type { Profile } from '@lib/schema/profile';
 import { loadProfile, saveProfile, watchProfile } from '@lib/storage/profileStore';
-import { loadSettings, saveSettings, type Settings } from '@lib/storage/settingsStore';
+import { loadSettings, saveSettings, watchSettings, type Settings } from '@lib/storage/settingsStore';
 import {
   buildAnswerPrompt,
   buildCoverLetterPrompt,
@@ -52,7 +52,12 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Ac
     void loadProfile().then(setProfile);
     void loadSettings().then(setSettings);
     void listVersions().then(setVersions);
-    return watchProfile(setProfile);
+    const unwatchProfile = watchProfile(setProfile);
+    const unwatchSettings = watchSettings(setSettings);
+    return () => {
+      unwatchProfile();
+      unwatchSettings();
+    };
   }, []);
 
   useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
