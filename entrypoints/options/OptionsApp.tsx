@@ -11,6 +11,7 @@ import { loadProfile, saveProfile, watchProfile } from '@lib/storage/profileStor
 import { DocumentsCard } from '@components/DocumentsCard';
 import { ImportProfileCard } from '@components/ImportProfileCard';
 import { BackupCard } from '@components/BackupCard';
+import { CommaListInput } from '@components/CommaListInput';
 import { ProfileSwitcher } from '@components/ProfileSwitcher';
 
 export function OptionsApp() {
@@ -262,18 +263,10 @@ function BulletsEditor({
           </label>
           <label className="field">
             Tags
-            <input
-              value={bullet.tags.join(', ')}
+            <CommaListInput
+              value={bullet.tags}
               placeholder="react, testing"
-              onChange={(e) =>
-                onChange(
-                  bullets.map((b, idx) =>
-                    idx === i
-                      ? { ...b, tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) }
-                      : b,
-                  ),
-                )
-              }
+              onChange={(tags) => onChange(bullets.map((b, idx) => (idx === i ? { ...b, tags } : b)))}
             />
           </label>
           <button className="entry-remove" onClick={() => onChange(bullets.filter((_, idx) => idx !== i))}>

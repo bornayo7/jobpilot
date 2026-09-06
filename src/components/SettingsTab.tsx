@@ -8,6 +8,7 @@ import {
 } from '@lib/storage/settingsStore';
 import { providerFor, routeTask } from '@lib/providers/router';
 import type { ProviderHealth } from '@lib/providers/types';
+import { CommaListInput } from './CommaListInput';
 
 const PROVIDER_CHOICES: { value: ModelRef['provider']; label: string }[] = [
   { value: 'anthropic', label: 'Anthropic' },
@@ -191,17 +192,10 @@ export function SettingsTab() {
         </label>
         <label>
           Custom warn-if-mentioned terms (comma-separated)
-          <input
-            value={settings.dealbreakers.terms.join(', ')}
+          <CommaListInput
+            value={settings.dealbreakers.terms}
             placeholder="on-site only, unpaid, commission"
-            onChange={(e) =>
-              update({
-                dealbreakers: {
-                  ...settings.dealbreakers,
-                  terms: e.target.value.split(',').map((t) => t.trim()).filter(Boolean),
-                },
-              })
-            }
+            onChange={(terms) => update({ dealbreakers: { ...settings.dealbreakers, terms } })}
           />
         </label>
       </section>
