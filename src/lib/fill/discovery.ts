@@ -4,6 +4,7 @@ import { deepQuerySelectorAll } from './dom/deepQuery';
 import { labelFor } from './dom/labelFor';
 import { radioGroupLabel, radioGroupOf, radioOptionLabel } from './dom/radioGroup';
 import { fieldSignature } from './signature';
+import { isUnavailable } from './dom/isUnavailable';
 
 export const FIELD_ID_ATTR = 'data-jobpilot-id';
 
@@ -32,6 +33,7 @@ export function discoverFields(atsId: AtsId | null, root: ParentNode = document)
   for (const el of deepQuerySelectorAll<HTMLElement>(CANDIDATE_SELECTOR, root)) {
     const control = classifyControl(el);
     if (!control) continue;
+    if (isUnavailable(el)) continue;
 
     if (control === 'radio' && el instanceof HTMLInputElement && el.getAttribute('name')) {
       if (groupedRadios.has(el)) continue;
@@ -98,14 +100,14 @@ export function observeFields(onChange: () => void, debounceMs = 400): () => voi
 }
 
 export function findByFieldId(fieldId: string): HTMLElement | null {
-  return (
-    deepQuerySelectorAll<HTMLElement>(`[${FIELD_ID_ATTR}="${fieldId}"]`).at(0) ?? null
-  );
+  const matches = deepQuerySelectorAll<HTMLElement>(`[${FIELD_ID_ATTR}="${fieldId}"]`);
+  return matches.find((el) => !isUnavailable(el)) ?? matches[0] ?? null;
 }
 
 /** One descriptor for a whole radio group; every member carries the same id so
  *  the right-click "fix this field" flow resolves from any button. */
 function describeRadioGroup(atsId: AtsId | null, group: HTMLInputElement[]): FormFieldDescriptor | null {
+  group = group.filter((r) => !isUnavailable(r));
   if (!group.some((r) => isVisible(r))) return null;
   const first = group[0];
   if (!first) return null;
@@ -143,6 +145,7 @@ function classifyControl(el: HTMLElement): FormFieldDescriptor['control'] | null
       case 'button':
       case 'image':
       case 'reset':
+      case 'password':
         return null;
       case 'file':
         return 'file';
@@ -165,7 +168,7 @@ function classifyControl(el: HTMLElement): FormFieldDescriptor['control'] | null
 function extractOptions(el: HTMLElement): { value: string; label: string }[] | undefined {
   if (el instanceof HTMLSelectElement) {
     return Array.from(el.options)
-      .filter((o) => o.value !== '')
+      .filter((o) => o.value !== '' && !isUnavailable(o))
       .map((o) => ({ value: o.value, label: (o.label || o.text || '').trim() }));
   }
   return undefined;

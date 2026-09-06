@@ -1,6 +1,7 @@
 import { ariaLabelOf, cleanText, explicitLabelFor } from './labelFor';
 import { setNativeChecked } from './setNativeValue';
 import { containsTokens, normalizeForSignature } from '../signature';
+import { isUnavailable } from './isUnavailable';
 
 /**
  * Radio buttons are one QUESTION spread over several inputs. Discovery reports
@@ -101,6 +102,7 @@ export function pickRadio(member: HTMLInputElement, wanted: string): RadioPickRe
       ? group.find((r) => containsTokens(normalizeForSignature(radioOptionLabel(r)), normWanted))
       : undefined);
   if (!target) return { ok: false, error: `no radio option "${wanted}"` };
+  if (isUnavailable(target)) return { ok: false, error: 'radio option is disabled' };
 
   setNativeChecked(target, true);
   if (!target.checked) return { ok: false, error: 'radio did not take the selection' };

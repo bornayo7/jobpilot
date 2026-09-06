@@ -4,6 +4,7 @@ import { setNativeChecked, setNativeValue } from './dom/setNativeValue';
 import { attachFileToInput } from './dom/attachFile';
 import { pickFromListbox } from './dom/pickFromListbox';
 import { pickRadio, type RadioPickResult } from './dom/radioGroup';
+import { isUnavailable } from './dom/isUnavailable';
 
 /**
  * Runs in the content script. Executes fill instructions against stamped
@@ -29,11 +30,15 @@ async function executeOne(
 ): Promise<FillResult> {
   const el = findByFieldId(instruction.fieldId);
   if (!el) return { fieldId: instruction.fieldId, ok: false, error: 'element not found' };
+  if (isUnavailable(el)) return { fieldId: instruction.fieldId, ok: false, error: 'control is disabled or read-only' };
 
   try {
     switch (instruction.action) {
       case 'setText': {
         const value = String(instruction.value);
+        if (el instanceof HTMLInputElement && ['checkbox', 'radio', 'file', 'password', 'hidden', 'submit', 'button', 'reset', 'image'].includes(el.type)) {
+          return { fieldId: instruction.fieldId, ok: false, error: 'not a text control' };
+        }
         if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
           setNativeValue(el, value, { blur: true });
           const readback = el.value;
@@ -64,12 +69,13 @@ async function executeOne(
           Array.from(el.options).find((o) => o.value === wanted) ??
           Array.from(el.options).find((o) => optionLabel(o) === wanted.toLowerCase());
         if (!option) return { fieldId: instruction.fieldId, ok: false, error: `no option "${wanted}"` };
+        if (isUnavailable(option)) return { fieldId: instruction.fieldId, ok: false, error: 'option is disabled' };
         setNativeValue(el, option.value);
         return { fieldId: instruction.fieldId, ok: el.value === option.value, verifiedValue: el.value };
       }
 
       case 'setChecked': {
-        if (!(el instanceof HTMLInputElement)) {
+        if (!(el instanceof HTMLInputElement) || !['checkbox', 'radio'].includes(el.type)) {
           return { fieldId: instruction.fieldId, ok: false, error: 'not a checkbox/radio' };
         }
         const wanted = instruction.value === true || instruction.value === 'true';

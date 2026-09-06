@@ -49,6 +49,18 @@ describe('discoverFields', () => {
     expect(a!.fieldId).toBe(b!.fieldId);
   });
 
+  it('skips disabled, read-only and password controls and unavailable options', () => {
+    document.body.innerHTML = `
+      <input name="email" disabled /><input name="name" readonly />
+      <input name="password" type="password" />
+      <fieldset disabled><input name="phone" /></fieldset>
+      <select name="country"><option value="x" disabled>X</option>
+        <optgroup disabled><option value="z">Z</option></optgroup><option value="y">Y</option></select>`;
+    const fields = discoverFields(null);
+    expect(fields).toHaveLength(1);
+    expect(fields[0]!.options).toEqual([{ value: 'y', label: 'Y' }]);
+  });
+
   it('skips unlabeled unnamed controls but keeps hidden file inputs', () => {
     document.body.innerHTML = `
       <input />

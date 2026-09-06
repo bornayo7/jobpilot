@@ -46,6 +46,23 @@ describe('executeInstructions', () => {
     expect(results[0]).toMatchObject({ ok: false, error: 'element not found' });
   });
 
+  it('rejects a control that became disabled after discovery', async () => {
+    document.body.innerHTML = '<input name="email" />';
+    const [field] = discoverFields(null);
+    const input = document.querySelector('input')!; input.disabled = true;
+    const results = await executeInstructions([instruction({ fieldId: field!.fieldId, action: 'setText', value: 'Ada' })]);
+    expect(results[0]!.ok).toBe(false);
+    expect(input.value).toBe('');
+  });
+
+  it('does not bypass disabled radio options with the native setter', async () => {
+    document.body.innerHTML = '<fieldset><legend>Authorized?</legend><label><input type="radio" name="a" value="y" />Yes</label><label><input type="radio" name="a" value="n" disabled />No</label></fieldset>';
+    const [field] = discoverFields(null);
+    const result = await executeInstructions([instruction({ fieldId: field!.fieldId, action: 'selectOption', value: 'n' })]);
+    expect(result[0]!.ok).toBe(false);
+    expect(document.querySelector<HTMLInputElement>('input[value="n"]')!.checked).toBe(false);
+  });
+
   it('selects a radio group member by value or by label', async () => {
     document.body.innerHTML = `
       <form>
