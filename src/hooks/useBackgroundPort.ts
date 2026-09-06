@@ -65,7 +65,24 @@ export function useBackgroundPort() {
         if (!disposed) setTimeout(connect, 400);
       });
 
-      port.postMessage({ t: 'panel/attach', tabId: null } satisfies PanelToBg);
+      // Attach with this panel's window so the hub only follows tab switches
+      // inside it. windows.getCurrent() is async; if the port died meanwhile
+      // the reconnect path attaches again, so a failed post is fine to drop.
+      const attach = (windowId?: number) => {
+        try {
+          port.postMessage({
+            t: 'panel/attach',
+            tabId: null,
+            ...(windowId !== undefined ? { windowId } : {}),
+          } satisfies PanelToBg);
+        } catch {
+          // port already gone
+        }
+      };
+      browser.windows.getCurrent().then(
+        (win) => attach(win.id),
+        () => attach(),
+      );
     };
 
     connect();

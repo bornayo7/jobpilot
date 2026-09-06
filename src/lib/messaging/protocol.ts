@@ -97,7 +97,9 @@ export type BgToCs =
 
 /** Side panel → background. */
 export type PanelToBg =
-  | { t: 'panel/attach'; tabId: number | null }
+  /** windowId scopes the panel: tab activations in OTHER windows must not
+   *  repoint it (side panels are per-window). */
+  | { t: 'panel/attach'; tabId: number | null; windowId?: number }
   | { t: 'panel/scan'; tabId: number }
   | { t: 'panel/execute'; tabId: number; frameId: number; instructions: FillInstruction[]; files?: SerializedFile[] }
   | { t: 'panel/highlight'; tabId: number; frameId: number; fieldId: string }

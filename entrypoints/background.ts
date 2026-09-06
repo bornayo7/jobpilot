@@ -37,7 +37,8 @@ export default defineBackground(() => {
 
   const csPorts = new Map<string, Port>();
   const frameMeta = new Map<string, { atsId: AtsId | null; url: string }>();
-  const panelPorts = new Map<Port, number | null>(); // port -> attached tabId
+  /** port -> the tab it shows and the window it lives in (null = unknown). */
+  const panelPorts = new Map<Port, { tabId: number | null; windowId: number | null }>();
   /** Submit-attempt snapshots awaiting a confirmation page, per tab. */
   const pendingAttempts = new Map<number, { url: string; title: string; answers: CapturedAnswer[]; at: number }>();
 
@@ -140,8 +141,8 @@ export default defineBackground(() => {
   };
 
   const relayToPanels = (tabId: number, frameId: number, event: CsToBg) => {
-    for (const [port, attachedTab] of panelPorts) {
-      if (attachedTab === tabId) {
+    for (const [port, attached] of panelPorts) {
+      if (attached.tabId === tabId) {
         sendToPanel(port, { t: 'bg/frameEvent', tabId, frameId, event });
       }
     }
@@ -190,8 +191,8 @@ export default defineBackground(() => {
       port.onDisconnect.addListener(() => {
         csPorts.delete(key);
         frameMeta.delete(key);
-        for (const [panelPort, attachedTab] of panelPorts) {
-          if (attachedTab === tabId) {
+        for (const [panelPort, attached] of panelPorts) {
+          if (attached.tabId === tabId) {
             sendToPanel(panelPort, { t: 'bg/frameGone', tabId, frameId });
           }
         }
@@ -200,18 +201,23 @@ export default defineBackground(() => {
     }
 
     if (port.name === PANEL_PORT) {
-      panelPorts.set(port, null);
+      panelPorts.set(port, { tabId: null, windowId: null });
 
       port.onMessage.addListener(async (raw) => {
         const msg = raw as PanelToBg;
         switch (msg.t) {
           case 'panel/attach': {
+            const windowId = msg.windowId ?? null;
             let tabId = msg.tabId;
             if (tabId === null) {
-              const [active] = await browser.tabs.query({ active: true, currentWindow: true });
+              // A service worker has no "current window"; ask for the panel's
+              // own window when it told us, else the last focused one.
+              const [active] = await browser.tabs.query(
+                windowId !== null ? { active: true, windowId } : { active: true, lastFocusedWindow: true },
+              );
               tabId = active?.id ?? null;
             }
-            panelPorts.set(port, tabId);
+            panelPorts.set(port, { tabId, windowId });
             if (tabId !== null) {
               sendToPanel(port, { t: 'bg/tabChanged', tabId, url: frameMeta.get(frameKey(tabId, 0))?.url ?? '' });
               replayFramesToPanel(port, tabId);
@@ -273,10 +279,13 @@ export default defineBackground(() => {
     pendingAttempts.delete(tabId);
   });
 
-  // Keep attached panels pointed at the tab the user is actually looking at.
-  browser.tabs.onActivated.addListener(({ tabId }) => {
-    for (const [port] of panelPorts) {
-      panelPorts.set(port, tabId);
+  // Keep attached panels pointed at the tab the user is actually looking at —
+  // in the panel's own window. Side panels are per-window, so a tab switch in
+  // a second window must not repoint the first window's panel.
+  browser.tabs.onActivated.addListener(({ tabId, windowId }) => {
+    for (const [port, attached] of panelPorts) {
+      if (attached.windowId !== null && attached.windowId !== windowId) continue;
+      panelPorts.set(port, { ...attached, tabId });
       sendToPanel(port, { t: 'bg/tabChanged', tabId, url: frameMeta.get(frameKey(tabId, 0))?.url ?? '' });
       replayFramesToPanel(port, tabId);
     }
