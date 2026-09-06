@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   newId,
-  ProfileSchema,
   type EduEntry,
   type Profile,
   type ProjectEntry,
   type WorkEntry,
 } from '@lib/schema/profile';
-import { migrateProfile } from '@lib/schema/migrations';
+import { validateProfile } from '@lib/schema/migrations';
 import { loadProfile, saveProfile, watchProfile } from '@lib/storage/profileStore';
 import { DocumentsCard } from '@components/DocumentsCard';
 import { ImportProfileCard } from '@components/ImportProfileCard';
@@ -54,14 +53,22 @@ export function OptionsApp() {
   };
 
   const importJson = async (file: File) => {
+    // Validate hard on import — a bad file must fail loudly, not load as an
+    // empty profile that one click on Save would write over the real one.
+    let raw: unknown;
     try {
-      const parsed = migrateProfile(JSON.parse(await file.text()));
-      // Validate hard on import — bad files should fail loudly, not half-load.
-      setProfile(ProfileSchema.parse(parsed));
-      setDirty(true);
+      raw = JSON.parse(await file.text());
     } catch (err) {
       alert(`Import failed: ${String(err)}`);
+      return;
     }
+    const result = validateProfile(raw);
+    if (!result.ok) {
+      alert(`Import failed — not a JobPilot profile:\n${result.errors.join('\n')}`);
+      return;
+    }
+    setProfile(result.profile);
+    setDirty(true);
   };
 
   return (

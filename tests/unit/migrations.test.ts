@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { migrateProfile } from '@lib/schema/migrations';
+import { migrateProfile, validateProfile } from '@lib/schema/migrations';
 import { CURRENT_SCHEMA_VERSION, emptyProfile } from '@lib/schema/profile';
 
 describe('migrateProfile', () => {
@@ -35,5 +35,23 @@ describe('migrateProfile', () => {
   it('falls back to empty on unrecoverable junk', () => {
     expect(migrateProfile({ schemaVersion: 1, work: 'not-an-array' })).toEqual(emptyProfile());
     expect(migrateProfile(42)).toEqual(emptyProfile());
+  });
+});
+
+describe('validateProfile', () => {
+  it('accepts what migrateProfile accepts', () => {
+    const result = validateProfile({ basics: { firstName: 'Ada' } });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.profile.basics.firstName).toBe('Ada');
+  });
+
+  it('reports the reasons instead of falling back to an empty profile', () => {
+    const junk = validateProfile({ schemaVersion: 1, work: 'not-an-array' });
+    expect(junk.ok).toBe(false);
+    if (!junk.ok) expect(junk.errors[0]).toContain('work');
+
+    expect(validateProfile(42).ok).toBe(false);
+    expect(validateProfile([]).ok).toBe(false);
+    expect(validateProfile(null).ok).toBe(false);
   });
 });

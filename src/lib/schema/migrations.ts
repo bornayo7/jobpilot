@@ -10,6 +10,26 @@ import type { Profile } from './profile';
 export function migrateProfile(raw: unknown): Profile {
   if (raw == null) return emptyProfile();
 
+  const result = validateProfile(raw);
+  if (result.ok) return result.profile;
+
+  console.error('[jobpilot] profile failed validation after migration; starting fresh:', result.errors.join('; '));
+  return emptyProfile();
+}
+
+export type ProfileValidation = { ok: true; profile: Profile } | { ok: false; errors: string[] };
+
+/**
+ * The strict form: same migration chain, but a shape that does not validate
+ * is reported, not replaced. The options page's JSON import uses this so a
+ * wrong file is rejected with the reasons instead of silently loading an empty
+ * profile into the editor for the user to save over their real one.
+ */
+export function validateProfile(raw: unknown): ProfileValidation {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return { ok: false, errors: ['(root): expected a JSON object'] };
+  }
+
   let data = raw as Record<string, unknown>;
   const version = typeof data.schemaVersion === 'number' ? data.schemaVersion : 0;
 
@@ -21,11 +41,9 @@ export function migrateProfile(raw: unknown): Profile {
   }
 
   const parsed = ProfileSchema.safeParse(data);
-  if (parsed.success) return parsed.data;
-
-  console.error(
-    '[jobpilot] profile failed validation after migration; starting fresh:',
-    parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; '),
-  );
-  return emptyProfile();
+  if (parsed.success) return { ok: true, profile: parsed.data };
+  return {
+    ok: false,
+    errors: parsed.error.issues.slice(0, 8).map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`),
+  };
 }
