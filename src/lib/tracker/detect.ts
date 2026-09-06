@@ -6,8 +6,13 @@ import { detectAts } from '../fill/adapters/detect';
  * confirmation actually appears (copying the OSS lesson: submit-click alone
  * produces false "applied" records, the most common tracker complaint).
  */
+// "Thank you for your interest in <company>" is a job-POSTING greeting as
+// often as a confirmation, and this check runs on every page the content
+// script is injected into. It only counts when the same sentence goes on to
+// mention the application; the unqualified phrase created "applied" entries
+// for postings the user had merely opened.
 const CONFIRMATION_TEXT =
-  /thank you for (applying|your application|your interest in)|application (has been |was |is )?(submitted|received|sent|complete)|successfully (submitted|applied)|we('ve| have) received your application|your application to .{0,60} (was|has been) (sent|submitted)/i;
+  /thank you for (applying|your application)|thank you for your interest in [^.!\n]{0,80}?\b(applying|application)\b|application (has been |was |is )?(submitted|received|sent|complete)|successfully (submitted|applied)|we('ve| have) received your application|your application to .{0,60} (was|has been) (sent|submitted)/i;
 
 const CONFIRMATION_URL = /\/(thanks|thank-you|confirmation|already_applied|post-apply)\b/i;
 

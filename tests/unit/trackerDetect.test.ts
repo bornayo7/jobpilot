@@ -40,6 +40,18 @@ describe('confirmation + submit detection', () => {
     expect(looksLikeConfirmation('https://x.com', 'Please fill out the form below to apply.')).toBe(false);
   });
 
+  it('a posting greeting is not a confirmation unless it mentions the application', () => {
+    expect(
+      looksLikeConfirmation(
+        'https://boards.greenhouse.io/acme/jobs/1',
+        'Thank you for your interest in Acme! We build tools for builders. Apply below.',
+      ),
+    ).toBe(false);
+    expect(
+      looksLikeConfirmation('https://x.com', 'Thank you for your interest in Acme and for applying to the SWE role.'),
+    ).toBe(true);
+  });
+
   it('recognizes submit buttons without matching navigation buttons', () => {
     expect(looksLikeSubmitButton('Submit application')).toBe(true);
     expect(looksLikeSubmitButton('Apply now')).toBe(true);
