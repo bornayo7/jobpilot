@@ -24,18 +24,23 @@ export async function extractPdfText(bytes: ArrayBuffer): Promise<string> {
     ).toString();
   }
 
-  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(bytes) });
-  const doc = await loadingTask.promise;
-  const parts: string[] = [];
-  for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
-    const page = await doc.getPage(pageNum);
-    const content = await page.getTextContent();
-    for (const item of content.items) {
-      if ('str' in item && item.str) parts.push(item.str);
+  // pdf.js transfers this buffer to its worker. Keep the caller's PDF intact:
+  // approval stores those same bytes after validation completes.
+  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(bytes.slice(0)) });
+  try {
+    const doc = await loadingTask.promise;
+    const parts: string[] = [];
+    for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
+      const page = await doc.getPage(pageNum);
+      const content = await page.getTextContent();
+      for (const item of content.items) {
+        if ('str' in item && item.str) parts.push(item.str);
+      }
     }
+    return parts.join(' ');
+  } finally {
+    await loadingTask.destroy();
   }
-  await loadingTask.destroy();
-  return parts.join(' ');
 }
 
 /**
