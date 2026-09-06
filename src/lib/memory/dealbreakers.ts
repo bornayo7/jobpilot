@@ -72,10 +72,10 @@ export function checkDealbreakers(jdText: string, settings: Settings): Dealbreak
   return warnings;
 }
 
-/** Highest dollar figure in the text, reading $85,000 / $85k / $85K styles. */
+/** Highest dollar figure in the text, reading $85,000 / $85000 / $85k / $85K styles. */
 export function maxPostedSalary(text: string): number | null {
   let max: number | null = null;
-  for (const match of text.matchAll(/\$\s?(\d{1,3}(?:,\d{3})+|\d{2,3})(k)?\b/gi)) {
+  for (const match of text.matchAll(/\$\s?(\d{1,3}(?:,\d{3})+|\d{4,7}|\d{2,3})(k)?\b/gi)) {
     const digits = Number(match[1]!.replace(/,/g, ''));
     const value = match[2] ? digits * 1000 : digits;
     // Ignore small figures ($50 signing gift cards etc.) — salaries are >= 20k.

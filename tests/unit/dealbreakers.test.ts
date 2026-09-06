@@ -64,6 +64,7 @@ describe('maxPostedSalary', () => {
   it('reads $85,000 / $85k / mixed formats and picks the max', () => {
     expect(maxPostedSalary('range $70,000 to $85,000')).toBe(85_000);
     expect(maxPostedSalary('between $90k and $120K DOE')).toBe(120_000);
+    expect(maxPostedSalary('Salary: $85000 - $105000 annually')).toBe(105_000);
     expect(maxPostedSalary('a $50 gift card for interviewing')).toBeNull();
   });
 });
