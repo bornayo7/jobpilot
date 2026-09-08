@@ -1,21 +1,9 @@
-import { getDb } from '../storage/db';
+import { getDb, type AnswerRecord } from '../storage/db';
 import { newId } from '../schema/profile';
 import { normalizeForSignature } from '../fill/signature';
 import { questionSimilarity } from '../util/fuzzy';
 
-export interface AnswerRecord {
-  id: string;
-  questionRaw: string;
-  questionNormalized: string;
-  answer: string;
-  /** Tracker job id (or '' for manually added general answers). */
-  jobId: string;
-  company: string;
-  /** Cross-job reuse gate. Hand-typed/captured answers default true;
-   *  AI-generated ones must be flipped deliberately. */
-  reusable: boolean;
-  createdAt: number;
-}
+export type { AnswerRecord } from '../storage/db';
 
 export async function saveAnswer(
   input: Omit<AnswerRecord, 'id' | 'createdAt' | 'questionNormalized'>,
@@ -39,7 +27,7 @@ export async function saveAnswer(
 
 export async function listAnswers(): Promise<AnswerRecord[]> {
   const db = await getDb();
-  const all = (await db.getAll('answers')) as AnswerRecord[];
+  const all = await db.getAll('answers');
   return all.sort((a, b) => b.createdAt - a.createdAt);
 }
 

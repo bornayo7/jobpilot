@@ -3,8 +3,8 @@ import type { PanelState } from './useBackgroundPort';
 import type { Profile } from '@lib/schema/profile';
 import { loadProfile, watchProfile } from '@lib/storage/profileStore';
 import { loadSettings, watchSettings, type Settings } from '@lib/storage/settingsStore';
-import { listDocuments } from '@lib/storage/documents';
-import { getDb } from '@lib/storage/db';
+import { getDocumentMeta } from '@lib/storage/documents';
+import { recordUnmatched } from '@lib/storage/unmatchedLog';
 import { resolveFields, type ResolveOutcome, type ReviewRow } from '@lib/fill/resolver';
 import { valueFor, type ResumeMeta } from '@lib/fill/valueFor';
 import type { FieldKind } from '@lib/schema/fieldKind';
@@ -55,13 +55,12 @@ export function useFillPlan(state: PanelState) {
     // Hold resolution until the lookup lands: resolving with a not-yet-loaded
     // resume would produce a plan with no file attachment.
     let cancelled = false;
-    void listDocuments().then((docs) => {
+    // No fallback to "some other document": the blob store also holds
+    // generated cover letters and DOCX twins, and attaching one of those to a
+    // real application is worse than attaching nothing. A dangling default
+    // surfaces as the "no default resume" warning instead.
+    void getDocumentMeta(id).then((doc) => {
       if (cancelled) return;
-      // No fallback to "some other document": the blob store also holds
-      // generated cover letters and DOCX twins, and attaching one of those to a
-      // real application is worse than attaching nothing. A dangling default
-      // surfaces as the "no default resume" warning instead.
-      const doc = docs.find((d) => d.id === id) ?? null;
       setResumeLookup({ profile, value: doc ? { blobId: doc.id, filename: doc.name } : null });
     }).catch((err) => {
       console.error('[jobpilot] resume lookup failed', err);
@@ -139,7 +138,7 @@ export function useFillPlan(state: PanelState) {
             next.set(frameId, { ...outcome, resolving: false });
             return next;
           });
-          await logUnmatched(frame.atsId, frame.url, outcome);
+          await recordUnmatched(frame.atsId, frame.url, outcome.unmatched);
         })
         .catch((err) => {
           if (!isCurrent()) return;
@@ -287,31 +286,5 @@ function userInstruction(row: ReviewRow, frameId: number, text: string): FillIns
       return { ...base, action: 'pickListbox', value: text };
     default:
       return { ...base, action: 'setText', value: text };
-  }
-}
-
-async function logUnmatched(
-  atsId: string | null,
-  url: string,
-  outcome: ResolveOutcome,
-): Promise<void> {
-  if (outcome.unmatched.length === 0) return;
-  try {
-    const db = await getDb();
-    const tx = db.transaction('unmatchedLog', 'readwrite');
-    for (const field of outcome.unmatched) {
-      await tx.store.put({
-        id: field.signature, // dedupe: one row per unique field shape
-        atsId,
-        url,
-        label: field.label || field.name || '(unlabeled)',
-        control: field.control,
-        signature: field.signature,
-        seenAt: Date.now(),
-      });
-    }
-    await tx.done;
-  } catch (err) {
-    console.warn('[jobpilot] unmatched log write failed', err);
   }
 }

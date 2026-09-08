@@ -1,18 +1,19 @@
 import { browser } from '#imports';
-import { getDb } from '../storage/db';
+import { getDb, JOB_STATUSES } from '../storage/db';
 import { arrayBufferToBase64, base64ToUint8Array } from './base64';
 import { z } from 'zod';
 import { ProfileSchema } from '../schema/profile';
 import { ResumeVersionSchema } from '../schema/resumeVersion';
-import { SettingsSchema } from '../storage/settingsStore';
-import { loadContainer } from '../storage/profileStore';
+import { SETTINGS_KEY, SettingsSchema } from '../storage/settingsStore';
+import { PROFILES_KEY, loadContainer } from '../storage/profileStore';
+import { MAPPING_CACHE_KEY } from '../storage/mappingCache';
 import { ALL_FIELD_KINDS, type FieldKind } from '../schema/fieldKind';
 
 /**
  * Gather/restore everything JobPilot stores. Restore is replace-all — the
  * options page confirms with the user before calling it.
  */
-const LOCAL_KEYS = ['jobpilot:profiles', 'jobpilot:settings', 'jobpilot:mappingCache'] as const;
+const LOCAL_KEYS = [PROFILES_KEY, SETTINGS_KEY, MAPPING_CACHE_KEY] as const;
 const IDB_STORES = ['blobs', 'resumeVersions', 'answers', 'trackerJobs', 'unmatchedLog'] as const;
 
 export interface BackupPayload {
@@ -95,7 +96,7 @@ const schemas = {
   }),
   trackerJobs: z.object({
     ...record, company: z.string(), title: z.string(), url: z.string(), notes: z.string(),
-    status: z.enum(['applied', 'interviewing', 'offer', 'rejected', 'saved']),
+    status: z.enum(JOB_STATUSES),
     resumeVersionId: id.optional(), resumeName: z.string().optional(),
     appliedAt: timestamp.optional(), followUpAt: timestamp.optional(),
   }),
@@ -109,12 +110,12 @@ function validatePayload(raw: unknown) {
   const parsed = z.object({
     exportedAt: timestamp,
     local: z.object({
-      'jobpilot:profiles': z.object({
+      [PROFILES_KEY]: z.object({
         activeId: id,
         profiles: z.record(z.object({ name: z.string(), profile: ProfileSchema })),
       }).refine((c) => Object.hasOwn(c.profiles, c.activeId), 'Active profile is missing'),
-      'jobpilot:settings': SettingsSchema.optional(),
-      'jobpilot:mappingCache': z.record(z.object({
+      [SETTINGS_KEY]: SettingsSchema.optional(),
+      [MAPPING_CACHE_KEY]: z.record(z.object({
         kind: z.string().refine((kind) => ALL_FIELD_KINDS.includes(kind as FieldKind)),
         confidence: z.number().min(0).max(1), source: z.enum(['llm', 'user-correction']),
         model: z.string().optional(), createdAt: timestamp, lastHit: timestamp, hits: timestamp,

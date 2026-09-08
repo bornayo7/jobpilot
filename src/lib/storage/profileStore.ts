@@ -9,7 +9,7 @@ import { migrateProfile } from '../schema/migrations';
  * profile — so every existing consumer works unchanged. Management functions
  * below handle switching/creating/renaming.
  */
-const CONTAINER_KEY = 'jobpilot:profiles';
+export const PROFILES_KEY = 'jobpilot:profiles';
 const LEGACY_KEY = 'jobpilot:profile';
 const BACKUP_KEY = 'jobpilot:profile:backup';
 
@@ -25,8 +25,8 @@ interface ProfilesContainer {
 }
 
 export async function loadContainer(): Promise<ProfilesContainer> {
-  const stored = await browser.storage.local.get([CONTAINER_KEY, LEGACY_KEY]);
-  const container = stored[CONTAINER_KEY] as ProfilesContainer | undefined;
+  const stored = await browser.storage.local.get([PROFILES_KEY, LEGACY_KEY]);
+  const container = stored[PROFILES_KEY] as ProfilesContainer | undefined;
   if (container && container.profiles && Object.keys(container.profiles).length > 0) {
     if (!(container.activeId in container.profiles)) {
       // A dangling activeId is a repairable inconsistency, not a reason to
@@ -41,12 +41,12 @@ export async function loadContainer(): Promise<ProfilesContainer> {
     activeId: 'default',
     profiles: { default: { name: 'Default', profile: migrateProfile(stored[LEGACY_KEY]) } },
   };
-  await browser.storage.local.set({ [CONTAINER_KEY]: migrated });
+  await browser.storage.local.set({ [PROFILES_KEY]: migrated });
   return migrated;
 }
 
 async function saveContainer(container: ProfilesContainer): Promise<void> {
-  await browser.storage.local.set({ [CONTAINER_KEY]: container });
+  await browser.storage.local.set({ [PROFILES_KEY]: container });
 }
 
 export async function loadProfile(): Promise<Profile> {
@@ -69,8 +69,8 @@ export async function saveProfile(profile: Profile): Promise<void> {
 /** Fires on any change to the active profile, including profile switches. */
 export function watchProfile(cb: (profile: Profile) => void): () => void {
   const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
-    if (area !== 'local' || !changes[CONTAINER_KEY]) return;
-    const container = changes[CONTAINER_KEY].newValue as ProfilesContainer | undefined;
+    if (area !== 'local' || !changes[PROFILES_KEY]) return;
+    const container = changes[PROFILES_KEY].newValue as ProfilesContainer | undefined;
     if (!container) return;
     cb(migrateProfile(container.profiles[container.activeId]?.profile));
   };

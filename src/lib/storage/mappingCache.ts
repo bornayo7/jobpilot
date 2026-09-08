@@ -11,7 +11,7 @@ export interface MappingEntry {
   hits: number;
 }
 
-const KEY = 'jobpilot:mappingCache';
+export const MAPPING_CACHE_KEY = 'jobpilot:mappingCache';
 const MAX_ENTRIES = 2000;
 
 type CacheShape = Record<string, MappingEntry>;
@@ -19,7 +19,7 @@ type CacheShape = Record<string, MappingEntry>;
 let pending: Promise<unknown> = Promise.resolve();
 
 async function withCacheLock<T>(operation: () => Promise<T>): Promise<T> {
-  if (globalThis.navigator?.locks) return await navigator.locks.request(KEY, operation);
+  if (globalThis.navigator?.locks) return await navigator.locks.request(MAPPING_CACHE_KEY, operation);
   // Also serialize callers in environments without the Web Locks API.
   const result = pending.then(operation, operation);
   pending = result.then(() => undefined, () => undefined);
@@ -27,12 +27,12 @@ async function withCacheLock<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 async function readAll(): Promise<CacheShape> {
-  const stored = await browser.storage.local.get(KEY);
-  return (stored[KEY] as CacheShape | undefined) ?? {};
+  const stored = await browser.storage.local.get(MAPPING_CACHE_KEY);
+  return (stored[MAPPING_CACHE_KEY] as CacheShape | undefined) ?? {};
 }
 
 async function writeAll(cache: CacheShape): Promise<void> {
-  await browser.storage.local.set({ [KEY]: cache });
+  await browser.storage.local.set({ [MAPPING_CACHE_KEY]: cache });
 }
 
 /** Batch lookup; bumps hit counters for found entries. */

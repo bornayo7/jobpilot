@@ -1,23 +1,8 @@
-import { getDb } from '../storage/db';
+import { getDb, type TrackerJob } from '../storage/db';
 import { newId } from '../schema/profile';
 import { normalizeForSignature } from '../fill/signature';
 
-export type JobStatus = 'applied' | 'interviewing' | 'offer' | 'rejected' | 'saved';
-
-export interface TrackerJob {
-  id: string;
-  company: string;
-  title: string;
-  url: string;
-  status: JobStatus;
-  resumeVersionId?: string;
-  /** Display name of the resume attached at submit time. */
-  resumeName?: string;
-  notes: string;
-  appliedAt?: number;
-  followUpAt?: number;
-  createdAt: number;
-}
+export type { JobStatus, TrackerJob } from '../storage/db';
 
 const DEFAULT_FOLLOW_UP_DAYS = 7;
 
@@ -26,7 +11,7 @@ export async function createJob(
 ): Promise<TrackerJob | null> {
   const db = await getDb();
   // Dedupe: same company+title inside 24h is one application.
-  const all = (await db.getAll('trackerJobs')) as TrackerJob[];
+  const all = await db.getAll('trackerJobs');
   const key = normalizeForSignature(`${input.company} ${input.title}`);
   const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
   if (all.some((job) => normalizeForSignature(`${job.company} ${job.title}`) === key && job.createdAt > dayAgo)) {
@@ -49,7 +34,7 @@ export async function createJob(
 
 export async function listJobs(): Promise<TrackerJob[]> {
   const db = await getDb();
-  const all = (await db.getAll('trackerJobs')) as TrackerJob[];
+  const all = await db.getAll('trackerJobs');
   return all.sort((a, b) => b.createdAt - a.createdAt);
 }
 

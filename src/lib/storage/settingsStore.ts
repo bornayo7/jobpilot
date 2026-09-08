@@ -46,22 +46,22 @@ export const SettingsSchema = z.object({
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
-const KEY = 'jobpilot:settings';
+export const SETTINGS_KEY = 'jobpilot:settings';
 
 export async function loadSettings(): Promise<Settings> {
-  const stored = await browser.storage.local.get(KEY);
-  return parseSettings(stored[KEY]);
+  const stored = await browser.storage.local.get(SETTINGS_KEY);
+  return parseSettings(stored[SETTINGS_KEY]);
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {
-  await browser.storage.local.set({ [KEY]: settings });
+  await browser.storage.local.set({ [SETTINGS_KEY]: settings });
 }
 
 /** Fires whenever settings are saved from any extension page. */
 export function watchSettings(cb: (settings: Settings) => void): () => void {
   const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
-    if (area !== 'local' || !changes[KEY]) return;
-    cb(parseSettings(changes[KEY].newValue));
+    if (area !== 'local' || !changes[SETTINGS_KEY]) return;
+    cb(parseSettings(changes[SETTINGS_KEY].newValue));
   };
   browser.storage.onChanged.addListener(listener);
   return () => browser.storage.onChanged.removeListener(listener);

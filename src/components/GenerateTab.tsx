@@ -22,7 +22,7 @@ import {
   storeRenderedBlob,
   type VersionRecord,
 } from '@lib/storage/versions';
-import { getDb } from '@lib/storage/db';
+import { getDocument } from '@lib/storage/documents';
 import { computeMatchGap } from '@lib/memory/matchGap';
 import { saveAnswer } from '@lib/memory/answers';
 import { companyFromUrl } from '@lib/tracker/detect';
@@ -551,8 +551,7 @@ function VersionRow({
 }
 
 async function blobUrlFor(blobId: string): Promise<{ url: string; name: string } | null> {
-  const db = await getDb();
-  const doc = await db.get('blobs', blobId);
+  const doc = await getDocument(blobId);
   if (!doc) return null;
   return { url: URL.createObjectURL(new Blob([doc.bytes], { type: doc.type })), name: doc.name };
 }
