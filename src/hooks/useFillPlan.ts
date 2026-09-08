@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PanelState } from './useBackgroundPort';
+import { useProfile, useSettings } from './useStores';
 import type { Profile } from '@lib/schema/profile';
-import { loadProfile, watchProfile } from '@lib/storage/profileStore';
-import { loadSettings, watchSettings, type Settings } from '@lib/storage/settingsStore';
 import { getDocumentMeta } from '@lib/storage/documents';
 import { recordUnmatched } from '@lib/storage/unmatchedLog';
 import { resolveFields, reviewRow, unmatchedRow, type ResolveOutcome, type ReviewRow } from '@lib/fill/resolver';
@@ -20,8 +19,10 @@ export interface FramePlan {
 }
 
 export function useFillPlan(state: PanelState) {
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [settings, setSettings] = useState<Settings | null>(null);
+  const { profile } = useProfile();
+  // Settings saved in the Settings tab (a key added, routing changed, a
+  // dealbreaker toggled) reach the plan live, without reopening the panel.
+  const { settings } = useSettings();
   /** `undefined` = lookup for the current profile still in flight. */
   const [resumeLookup, setResumeLookup] = useState<{ profile: Profile; value: ResumeMeta | null } | null>(null);
   const resume = resumeLookup?.profile === profile ? resumeLookup?.value : undefined;
@@ -30,19 +31,6 @@ export function useFillPlan(state: PanelState) {
   const resolveInputs = useRef<unknown[]>([]);
 
   useEffect(() => () => resolveKeys.current.clear(), []);
-
-  useEffect(() => {
-    void loadProfile().then(setProfile);
-    void loadSettings().then(setSettings);
-    const unwatchProfile = watchProfile(setProfile);
-    // Settings saved in the Settings tab (a key added, routing changed, a
-    // dealbreaker toggled) must reach the plan without reopening the panel.
-    const unwatchSettings = watchSettings(setSettings);
-    return () => {
-      unwatchProfile();
-      unwatchSettings();
-    };
-  }, []);
 
   // Resolve the default resume's display name once profile + docs are known.
   useEffect(() => {

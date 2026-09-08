@@ -1,10 +1,10 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { browser } from '#imports';
-import type { PanelState } from '@hooks/useBackgroundPort';
+import type { PanelActions, PanelState } from '@hooks/useBackgroundPort';
 import { useFillPlan, type FramePlan } from '@hooks/useFillPlan';
 import { ATS_LABELS } from '@lib/fill/adapters/detect';
 import { ALL_FIELD_KINDS, type FieldKind } from '@lib/schema/fieldKind';
-import type { FillInstruction, PanelToBg, SerializedFile } from '@lib/messaging/protocol';
+import type { FillInstruction, SerializedFile } from '@lib/messaging/protocol';
 import { unmatchedRow, type ReviewRow } from '@lib/fill/resolver';
 import { loadDocumentAsFile } from '@lib/storage/documents';
 import { checkDealbreakers, type DealbreakerWarning } from '@lib/memory/dealbreakers';
@@ -12,15 +12,7 @@ import { listAnswers, rankAnswers, type AnswerRecord } from '@lib/memory/answers
 import { companyFromUrl } from '@lib/tracker/detect';
 import { findPreviousApplications, listJobs, type TrackerJob } from '@lib/tracker/store';
 
-interface Actions {
-  send(msg: PanelToBg): void;
-  scan(tabId: number): void;
-  execute(tabId: number, frameId: number, instructions: FillInstruction[], files?: SerializedFile[]): void;
-  highlight(tabId: number, frameId: number, fieldId: string): void;
-  extractJd(tabId: number): void;
-}
-
-export function FillTab({ state, actions }: { state: PanelState; actions: Actions }) {
+export function FillTab({ state, actions }: { state: PanelState; actions: PanelActions }) {
   const { profile, settings, resume, plans, toggleInclude, editValue, editKind } = useFillPlan(state);
   const [filling, setFilling] = useState(false);
   const [enableHint, setEnableHint] = useState('');

@@ -9,7 +9,8 @@ import type { PanelState } from '@hooks/useBackgroundPort';
 
 const mocks = vi.hoisted(() => ({ resolve: vi.fn(), watch: null as null | ((p: Profile) => void) }));
 vi.mock('@lib/fill/resolver', async (original) => ({ ...await original<object>(), resolveFields: mocks.resolve }));
-vi.mock('@lib/storage/profileStore', () => ({
+vi.mock('@lib/storage/profileStore', async (original) => ({
+  ...await original<object>(),
   loadProfile: async () => emptyProfile(),
   watchProfile: (cb: (p: Profile) => void) => { mocks.watch = cb; return () => {}; },
 }));

@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Profile } from '@lib/schema/profile';
-import { loadProfile } from '@lib/storage/profileStore';
-import { loadSettings, type Settings } from '@lib/storage/settingsStore';
+import { useProfile, useSettings } from '@hooks/useStores';
 import {
   deleteJob,
   dueFollowUps,
@@ -27,18 +25,15 @@ const STATUSES: { value: JobStatus; label: string }[] = [
  */
 export function TrackerTab({ active = true }: { active?: boolean }) {
   const [jobs, setJobs] = useState<TrackerJob[]>([]);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [settings, setSettings] = useState<Settings | null>(null);
+  const { profile } = useProfile();
+  const { settings } = useSettings();
   const [copiedId, setCopiedId] = useState('');
 
   const refresh = () => void listJobs().then(setJobs);
   // The tab stays mounted while hidden; reload when it comes into view so
   // applications recorded meanwhile show up.
   useEffect(() => {
-    if (!active) return;
-    refresh();
-    void loadProfile().then(setProfile);
-    void loadSettings().then(setSettings);
+    if (active) refresh();
   }, [active]);
 
   const due = dueFollowUps(jobs);

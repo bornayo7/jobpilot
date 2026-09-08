@@ -123,6 +123,9 @@ export function useBackgroundPort() {
   return { state, actions };
 }
 
+/** What the tabs may ask the background to do. */
+export type PanelActions = ReturnType<typeof useBackgroundPort>['actions'];
+
 export function reduce(prev: PanelState, msg: BgToPanel): PanelState {
   switch (msg.t) {
     case 'bg/tabChanged': {

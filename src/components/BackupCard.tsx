@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { decryptBackup, encryptBackup, type BackupEnvelope } from '@lib/util/backup';
 import { gatherBackupPayload, restoreBackupPayload, type BackupPayload } from '@lib/util/backupStore';
+import { downloadFile } from '@lib/util/download';
 
 /**
  * Encrypted full backup/restore: one passphrase-protected .jpbak file holding
@@ -21,14 +22,10 @@ export function BackupCard() {
     try {
       const payload = await gatherBackupPayload();
       const envelope = await encryptBackup(payload, passphrase);
-      const blob = new Blob([JSON.stringify(envelope)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `jobpilot-backup-${new Date().toISOString().slice(0, 10)}.jpbak`;
-      a.click();
-      // Revoking synchronously races the download the click just started.
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      downloadFile(
+        new Blob([JSON.stringify(envelope)], { type: 'application/json' }),
+        `jobpilot-backup-${new Date().toISOString().slice(0, 10)}.jpbak`,
+      );
       setStatus('Backup downloaded. The passphrase is NOT stored anywhere — keep it.');
     } catch (err) {
       setStatus(`Export failed: ${String(err).slice(0, 200)}`);

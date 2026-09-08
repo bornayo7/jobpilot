@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PanelState } from '@hooks/useBackgroundPort';
-import type { PanelToBg } from '@lib/messaging/protocol';
-import type { Profile } from '@lib/schema/profile';
-import { loadProfile, saveProfile, watchProfile } from '@lib/storage/profileStore';
-import { loadSettings, saveSettings, watchSettings, type Settings } from '@lib/storage/settingsStore';
+import type { PanelActions, PanelState } from '@hooks/useBackgroundPort';
+import { useProfile, useSettings } from '@hooks/useStores';
 import {
   buildAnswerPrompt,
   buildCoverLetterPrompt,
@@ -23,20 +20,16 @@ import {
   type VersionRecord,
 } from '@lib/storage/versions';
 import { getDocument } from '@lib/storage/documents';
+import { downloadFile, openInNewTab } from '@lib/util/download';
 import { computeMatchGap } from '@lib/memory/matchGap';
 import { saveAnswer } from '@lib/memory/answers';
 import { companyFromUrl } from '@lib/tracker/detect';
 
-interface Actions {
-  send(msg: PanelToBg): void;
-  extractJd(tabId: number): void;
-}
-
 type PromptType = 'resume' | 'coverLetter' | 'answer';
 
-export function GenerateTab({ state, actions }: { state: PanelState; actions: Actions }) {
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [settings, setSettings] = useState<Settings | null>(null);
+export function GenerateTab({ state, actions }: { state: PanelState; actions: Pick<PanelActions, 'extractJd'> }) {
+  const { profile, save: saveProfile } = useProfile();
+  const { settings, save: saveSettings } = useSettings();
   const [promptType, setPromptType] = useState<PromptType>('resume');
   const [question, setQuestion] = useState('');
   const [copied, setCopied] = useState(false);
@@ -59,15 +52,7 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Ac
   }, [state.tabId, state.tabUrl, profile]);
 
   useEffect(() => {
-    void loadProfile().then(setProfile);
-    void loadSettings().then(setSettings);
     void listVersions().then(setVersions);
-    const unwatchProfile = watchProfile(setProfile);
-    const unwatchSettings = watchSettings(setSettings);
-    return () => {
-      unwatchProfile();
-      unwatchSettings();
-    };
   }, []);
 
   useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
@@ -269,9 +254,7 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Ac
 
   const updateTone = async (tone: string) => {
     if (!settings) return;
-    const next = { ...settings, promptStyle: { ...settings.promptStyle, tone } };
-    setSettings(next);
-    await saveSettings(next);
+    await saveSettings({ ...settings, promptStyle: { ...settings.promptStyle, tone } });
   };
 
   if (state.tabId === null) return <div className="placeholder"><p>No active tab.</p></div>;
@@ -527,9 +510,9 @@ function VersionRow({
         </span>
       </div>
       <div className="field-meta">
-        {record.pdfBlobId && <button onClick={() => void openBlob(record.pdfBlobId!)}>Preview</button>}
-        {record.pdfBlobId && <button onClick={() => void downloadBlob(record.pdfBlobId!)}>PDF</button>}
-        {record.docxBlobId && <button onClick={() => void downloadBlob(record.docxBlobId!)}>DOCX</button>}
+        {record.pdfBlobId && <button onClick={() => void openStoredDocument(record.pdfBlobId!)}>Preview</button>}
+        {record.pdfBlobId && <button onClick={() => void downloadStoredDocument(record.pdfBlobId!)}>PDF</button>}
+        {record.docxBlobId && <button onClick={() => void downloadStoredDocument(record.docxBlobId!)}>DOCX</button>}
         {record.kind === 'coverLetter' && (
           <button onClick={() => void navigator.clipboard.writeText((record.data as { text: string }).text)}>
             Copy text
@@ -550,40 +533,14 @@ function VersionRow({
   );
 }
 
-async function blobUrlFor(blobId: string): Promise<{ url: string; name: string } | null> {
+async function openStoredDocument(blobId: string): Promise<void> {
   const doc = await getDocument(blobId);
-  if (!doc) return null;
-  return { url: URL.createObjectURL(new Blob([doc.bytes], { type: doc.type })), name: doc.name };
+  if (doc) openInNewTab(new Blob([doc.bytes], { type: doc.type }));
 }
 
-/**
- * Object URLs handed to the browser (a new tab, a download) must outlive the
- * call: revoking synchronously after click()/open() races the fetch and can
- * produce an empty tab or a cancelled download. Revoke on a timer instead —
- * long enough for the browser to have read the blob, short enough not to pin
- * a resume-sized buffer in memory.
- */
-const OBJECT_URL_TTL_MS = 60_000;
-
-function revokeLater(url: string): void {
-  setTimeout(() => URL.revokeObjectURL(url), OBJECT_URL_TTL_MS);
-}
-
-async function openBlob(blobId: string): Promise<void> {
-  const found = await blobUrlFor(blobId);
-  if (!found) return;
-  window.open(found.url, '_blank');
-  revokeLater(found.url);
-}
-
-async function downloadBlob(blobId: string): Promise<void> {
-  const found = await blobUrlFor(blobId);
-  if (!found) return;
-  const a = document.createElement('a');
-  a.href = found.url;
-  a.download = found.name;
-  a.click();
-  revokeLater(found.url);
+async function downloadStoredDocument(blobId: string): Promise<void> {
+  const doc = await getDocument(blobId);
+  if (doc) downloadFile(new Blob([doc.bytes], { type: doc.type }), doc.name);
 }
 
 function fileBaseName(raw: string): string {

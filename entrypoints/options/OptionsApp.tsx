@@ -8,6 +8,7 @@ import {
 } from '@lib/schema/profile';
 import { validateProfile } from '@lib/schema/migrations';
 import { loadProfile, saveProfile, watchProfile } from '@lib/storage/profileStore';
+import { downloadFile } from '@lib/util/download';
 import { DocumentsCard } from '@components/DocumentsCard';
 import { ImportProfileCard } from '@components/ImportProfileCard';
 import { BackupCard } from '@components/BackupCard';
@@ -42,16 +43,8 @@ export function OptionsApp() {
     setSavedAt(Date.now());
   };
 
-  const exportJson = () => {
-    const blob = new Blob([JSON.stringify(profile, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'jobpilot-profile.json';
-    a.click();
-    // Revoking synchronously races the download the click just started.
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  };
+  const exportJson = () =>
+    downloadFile(new Blob([JSON.stringify(profile, null, 2)], { type: 'application/json' }), 'jobpilot-profile.json');
 
   const importJson = async (file: File) => {
     // Validate hard on import — a bad file must fail loudly, not load as an

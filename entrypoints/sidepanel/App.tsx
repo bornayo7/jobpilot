@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useBackgroundPort } from '@hooks/useBackgroundPort';
 import { FillTab } from '@components/FillTab';
 import { GenerateTab } from '@components/GenerateTab';
@@ -18,39 +18,33 @@ export function App() {
     if (state.focusField) setTab('Fill');
   }, [state.focusField]);
 
+  // Every tab stays mounted; only the active one is shown. Unmounting threw
+  // away the Fill tab's reviewed plan (and re-ran the resolver, model call
+  // included) and the Generate tab's pasted draft every time the user glanced
+  // at another tab.
+  const panels: Record<Tab, ReactNode> = {
+    Fill: <FillTab state={state} actions={actions} />,
+    Generate: <GenerateTab state={state} actions={actions} />,
+    Tracker: <TrackerTab active={tab === 'Tracker'} />,
+    Answers: <AnswersTab active={tab === 'Answers'} />,
+    Settings: <SettingsTab />,
+  };
+
   return (
     <div className="app">
       <nav className="tabs">
         {TABS.map((name) => (
-          <button
-            key={name}
-            className={tab === name ? 'tab active' : 'tab'}
-            onClick={() => setTab(name)}
-          >
+          <button key={name} className={tab === name ? 'tab active' : 'tab'} onClick={() => setTab(name)}>
             {name}
           </button>
         ))}
       </nav>
-      {/* Every tab stays mounted; only the active one is shown. Unmounting
-          threw away the Fill tab's reviewed plan (and re-ran the resolver,
-          model call included) and the Generate tab's pasted draft every time
-          the user glanced at another tab. */}
       <main className="content">
-        <div hidden={tab !== 'Fill'}>
-          <FillTab state={state} actions={actions} />
-        </div>
-        <div hidden={tab !== 'Generate'}>
-          <GenerateTab state={state} actions={actions} />
-        </div>
-        <div hidden={tab !== 'Tracker'}>
-          <TrackerTab active={tab === 'Tracker'} />
-        </div>
-        <div hidden={tab !== 'Answers'}>
-          <AnswersTab active={tab === 'Answers'} />
-        </div>
-        <div hidden={tab !== 'Settings'}>
-          <SettingsTab />
-        </div>
+        {TABS.map((name) => (
+          <div key={name} hidden={tab !== name}>
+            {panels[name]}
+          </div>
+        ))}
       </main>
     </div>
   );
