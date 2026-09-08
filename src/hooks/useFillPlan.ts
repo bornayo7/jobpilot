@@ -72,7 +72,8 @@ export function useFillPlan(state: PanelState) {
       resolveKeys.current.clear();
       setPlans(new Map());
     }
-    // Invalidate even while a replacement profile's resume is loading.
+    // A frame that went away, or lost its fields, has no plan — even while a
+    // replacement profile's resume is still loading.
     for (const frameId of resolveKeys.current.keys()) {
       if (!state.frames.get(frameId)?.fields.length) resolveKeys.current.delete(frameId);
     }
@@ -132,20 +133,6 @@ export function useFillPlan(state: PanelState) {
           });
         });
     }
-
-    // Drop plans for frames that disappeared.
-    setPlans((prev) => {
-      let changed = false;
-      const next = new Map(prev);
-      for (const frameId of next.keys()) {
-        if (!state.frames.has(frameId)) {
-          next.delete(frameId);
-          resolveKeys.current.delete(frameId);
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
   }, [state.tabId, state.frames, profile, settings, resume]);
 
   const mutateRow = useCallback(
