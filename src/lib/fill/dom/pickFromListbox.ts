@@ -1,13 +1,8 @@
+import type { FillOutcome } from '../../messaging/protocol';
 import { deepQuerySelectorAll } from './deepQuery';
 import { setNativeValue } from './setNativeValue';
 import { containsTokens, normalizeForSignature } from '../signature';
 import { isUnavailable } from './isUnavailable';
-
-export interface ListboxPickResult {
-  ok: boolean;
-  picked?: string;
-  error?: string;
-}
 
 /**
  * Drive an ARIA combobox / custom dropdown: open it (click, or type into the
@@ -21,7 +16,7 @@ export async function pickFromListbox(
   trigger: HTMLElement,
   targetText: string,
   timeoutMs = 3000,
-): Promise<ListboxPickResult> {
+): Promise<FillOutcome> {
   if (trigger instanceof HTMLInputElement) {
     trigger.focus();
     setNativeValue(trigger, targetText);
@@ -33,7 +28,7 @@ export async function pickFromListbox(
   if (!option) return { ok: false, error: 'no matching option appeared' };
 
   click(option);
-  return { ok: true, picked: option.textContent?.trim() ?? '' };
+  return { ok: true, verifiedValue: option.textContent?.trim() ?? '' };
 }
 
 function click(el: HTMLElement): void {

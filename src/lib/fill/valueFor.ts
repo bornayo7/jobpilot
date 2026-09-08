@@ -1,19 +1,13 @@
 import type { Profile } from '../schema/profile';
-import type { FieldKind } from '../schema/fieldKind';
-import { KIND_TO_PROFILE_PATH, SENSITIVE_KINDS } from '../schema/fieldKind';
-import type { FillAction, FormFieldDescriptor } from '../messaging/protocol';
+import { PROFILE_VALUE, SENSITIVE_KINDS, type FieldKind } from '../schema/fieldKind';
+import type { FillPayload, FormFieldDescriptor } from '../messaging/protocol';
 import { containsTokens, normalizeForSignature } from './signature';
 
-export interface ResolvedValue {
-  action: FillAction;
-  value: string | boolean | { blobKey: string; filename: string };
-  /** Human-readable preview for the review table. */
-  display: string;
+/** A concrete fill for one field, plus whether a human must look at it first. */
+export type ResolvedValue = FillPayload & {
   /** True when the match into select options was fuzzy or the value is sensitive. */
   requiresReview: boolean;
-  /** Null value: nothing in the profile answers this field. */
-  empty: boolean;
-}
+};
 
 export interface ResumeMeta {
   blobId: string;
@@ -21,9 +15,10 @@ export interface ResumeMeta {
 }
 
 /**
- * Turn (kind, profile, descriptor) into a concrete fill value + action.
- * Select/checkbox targets are matched against the field's real options —
- * a fuzzy option match or a sensitive kind is flagged for review.
+ * Turn (kind, profile, descriptor) into a concrete fill value + action, or
+ * null when the profile has nothing for this field. Select/checkbox targets
+ * are matched against the field's real options — a fuzzy option match or a
+ * sensitive kind is flagged for review.
  */
 export function valueFor(
   kind: FieldKind,
@@ -38,74 +33,35 @@ export function valueFor(
     return {
       action: 'attachFile',
       value: { blobKey: resume.blobId, filename: resume.filename },
-      display: resume.filename,
       requiresReview: false,
-      empty: false,
     };
   }
-  if (kind === 'docs.coverLetter') {
-    // Cover letters come from the Prompt Studio flow (M2) — never auto-filled.
-    return null;
-  }
-  if (kind === 'question.freeText' || kind === 'question.choice' || kind === 'unknown') {
-    return null;
-  }
 
-  const raw = rawValueFor(kind, profile);
-  if (raw === null || raw === '') return null;
+  const raw = PROFILE_VALUE[kind](profile);
+  if (raw === null) return null;
 
   // Boolean-answer kinds against yes/no style widgets.
   if (typeof raw === 'boolean') {
     if (field.control === 'checkbox') {
-      return { action: 'setChecked', value: raw, display: raw ? 'checked' : 'unchecked', requiresReview: sensitive, empty: false };
+      return { action: 'setChecked', value: raw, requiresReview: sensitive };
     }
-    const target = raw ? 'yes' : 'no';
     if (field.control === 'select' || field.control === 'combobox' || field.control === 'radio') {
-      return matchOption(field, target, sensitive, raw ? ['yes', 'i am authorized'] : ['no', 'not require']);
+      return matchOption(field, raw ? 'yes' : 'no', sensitive, raw ? ['yes', 'i am authorized'] : ['no', 'not require']);
     }
-    return { action: 'setText', value: raw ? 'Yes' : 'No', display: raw ? 'Yes' : 'No', requiresReview: true, empty: false };
+    return { action: 'setText', value: raw ? 'Yes' : 'No', requiresReview: true };
   }
 
   if (field.control === 'select' || field.control === 'radio') {
     return matchOption(field, raw, sensitive);
   }
   if (field.control === 'combobox') {
-    return { action: 'pickListbox', value: raw, display: raw, requiresReview: sensitive, empty: false };
+    return { action: 'pickListbox', value: raw, requiresReview: sensitive };
   }
   if (field.control === 'checkbox' || field.control === 'file') {
-    return null; // string value can't drive these
+    return null; // a string value can't drive these
   }
 
-  return { action: 'setText', value: raw, display: raw, requiresReview: sensitive, empty: false };
-}
-
-function rawValueFor(kind: FieldKind, profile: Profile): string | boolean | null {
-  switch (kind) {
-    case 'name.full': {
-      const full = `${profile.basics.firstName} ${profile.basics.lastName}`.trim();
-      return full || null;
-    }
-    case 'location.combined': {
-      const { city, state, country } = profile.basics.location;
-      const combined = [city, state || country].filter(Boolean).join(', ');
-      return combined || null;
-    }
-    case 'work.company':
-      return profile.work[0]?.company || null;
-    case 'work.title':
-      return profile.work[0]?.title || null;
-    default: {
-      const path = KIND_TO_PROFILE_PATH[kind];
-      if (!path) return null;
-      const value = path.split('.').reduce<unknown>((obj, key) => {
-        if (obj && typeof obj === 'object') return (obj as Record<string, unknown>)[key];
-        return undefined;
-      }, profile);
-      if (typeof value === 'boolean') return value;
-      if (typeof value === 'string') return value || null;
-      return null;
-    }
-  }
+  return { action: 'setText', value: raw, requiresReview: sensitive };
 }
 
 /**
@@ -126,22 +82,14 @@ function matchOption(
   const options = field.options ?? [];
   if (options.length === 0) {
     // Custom widget without enumerable options — let the listbox picker try.
-    return { action: 'pickListbox', value: target, display: target, requiresReview: true, empty: false };
+    return { action: 'pickListbox', value: target, requiresReview: true };
   }
 
   const normTarget = normalizeForSignature(target);
   const needles = [normTarget, ...extraNeedles.map(normalizeForSignature)];
 
   const exact = options.find((o) => normalizeForSignature(o.label) === normTarget);
-  if (exact) {
-    return {
-      action: 'selectOption',
-      value: exact.value,
-      display: exact.label,
-      requiresReview: sensitive,
-      empty: false,
-    };
-  }
+  if (exact) return { action: 'selectOption', value: exact.value, requiresReview: sensitive };
 
   for (const needle of needles) {
     if (!needle) continue;
@@ -151,15 +99,8 @@ function matchOption(
         const norm = normalizeForSignature(o.label);
         return containsTokens(norm, needle) || containsTokens(needle, norm);
       });
-    if (fuzzy) {
-      return {
-        action: 'selectOption',
-        value: fuzzy.value,
-        display: fuzzy.label,
-        requiresReview: true, // fuzzy match always gets human eyes
-        empty: false,
-      };
-    }
+    // A fuzzy match always gets human eyes.
+    if (fuzzy) return { action: 'selectOption', value: fuzzy.value, requiresReview: true };
   }
 
   return null;

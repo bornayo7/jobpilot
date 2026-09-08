@@ -128,9 +128,6 @@ export default defineContentScript({
           post({ t: 'cs/jdText', text: text.slice(0, 60_000), title: document.title });
           break;
         }
-        case 'bg/wizardNext':
-          // Wizard advancement is adapter work (Workday milestone).
-          break;
       }
     };
 

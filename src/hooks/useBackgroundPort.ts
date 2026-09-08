@@ -175,7 +175,6 @@ export function reduce(prev: PanelState, msg: BgToPanel): PanelState {
         }
         case 'cs/contextField':
           return { ...prev, focusField: { frameId: msg.frameId, fieldId: event.fieldId, at: Date.now() } };
-        case 'cs/wizardStep':
         case 'cs/submitAttempt':
         case 'cs/submitDetected':
           return prev; // Background consumes these (tracker + answers bank).

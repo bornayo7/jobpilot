@@ -180,7 +180,7 @@ Honest list of what isn't done:
 - **Never verified against a live application portal.** The code has been read carefully and unit-tested; that is not the same as having submitted a real application through it. Treat the first few runs as a test, with the console open.
 - No adapters yet for Workday, iCIMS, or SmartRecruiters — they fall back to heuristics.
 - Multi-step application wizards aren't advanced automatically.
-- Split month/year date widgets (`setDate`) aren't implemented.
+- Split month/year date widgets aren't implemented; date inputs are typed into as text.
 - Chrome's built-in Prompt API is stubbed out, not wired up.
 - The document store is shared between uploaded resumes and generated output, so the Documents list shows both.
 

@@ -5,10 +5,9 @@ import { loadProfile, watchProfile } from '@lib/storage/profileStore';
 import { loadSettings, watchSettings, type Settings } from '@lib/storage/settingsStore';
 import { getDocumentMeta } from '@lib/storage/documents';
 import { recordUnmatched } from '@lib/storage/unmatchedLog';
-import { resolveFields, type ResolveOutcome, type ReviewRow } from '@lib/fill/resolver';
-import { valueFor, type ResumeMeta } from '@lib/fill/valueFor';
+import { resolveFields, reviewRow, unmatchedRow, type ResolveOutcome, type ReviewRow } from '@lib/fill/resolver';
+import type { ResumeMeta } from '@lib/fill/valueFor';
 import type { FieldKind } from '@lib/schema/fieldKind';
-import { SENSITIVE_KINDS } from '@lib/schema/fieldKind';
 import { cacheSet } from '@lib/storage/mappingCache';
 import type { FillInstruction } from '@lib/messaging/protocol';
 
@@ -172,10 +171,7 @@ export function useFillPlan(state: PanelState) {
         const plan = prev.get(frameId);
         if (!plan) return prev;
         const unmatched = plan.unmatched.find((field) => field.fieldId === fieldId);
-        const promoted: ReviewRow | null = unmatched ? {
-          field: unmatched, kind: 'unknown', source: 'none', confidence: 0,
-          instruction: null, include: false, requiresReview: true, sensitive: false,
-        } : null;
+        const promoted = unmatched ? unmatchedRow(unmatched) : null;
         const next = new Map(prev);
         next.set(frameId, {
           ...plan,
@@ -217,25 +213,9 @@ export function useFillPlan(state: PanelState) {
   const editKind = useCallback(
     (frameId: number, fieldId: string, kind: FieldKind) => {
       if (!profile) return;
-      mutateRow(frameId, fieldId, (row) => {
-        const resolved = valueFor(kind, row.field, profile, resume ?? null);
-        const sensitive = SENSITIVE_KINDS.has(kind);
-        const requiresReview =
-          sensitive || kind === 'question.freeText' || kind === 'question.choice' || (resolved?.requiresReview ?? false);
-        const instruction: FillInstruction | null = resolved
-          ? {
-              fieldId,
-              frameId,
-              action: resolved.action,
-              value: resolved.value,
-              kind,
-              source: 'user',
-              confidence: 1,
-              requiresReview,
-            }
-          : null;
-        return { ...row, kind, source: 'user', confidence: 1, instruction, requiresReview, sensitive, include: instruction !== null && !requiresReview };
-      });
+      mutateRow(frameId, fieldId, (row) =>
+        reviewRow({ field: row.field, kind, source: 'user', confidence: 1, frameId, profile, resume: resume ?? null }),
+      );
       // A manual correction permanently shadows any LLM cache entry.
       const plan = plans.get(frameId);
       const field = plan?.rows.find((r) => r.field.fieldId === fieldId)?.field ?? plan?.unmatched.find((f) => f.fieldId === fieldId);

@@ -1,3 +1,5 @@
+import type { Profile } from './profile';
+
 /**
  * Semantic field kinds — the shared vocabulary between ATS adapters, heuristics,
  * the LLM mapping tier, and the profile. String union (not enum) so selector-map
@@ -46,54 +48,67 @@ export type FieldKind =
   | 'question.choice'
   | 'unknown';
 
+/** A profile answer: text, a yes/no, or null when the profile has nothing for it. */
+export type ProfileValue = string | boolean | null;
+
+const text = (value: string): ProfileValue => value || null;
+/** Kinds the profile cannot answer directly: files, free-text questions,
+ *  per-posting choices, and repeated work/education sections (not yet resolved). */
+const none = (): ProfileValue => null;
+
 /**
- * Where each kind reads from in the Profile. Paths are dot-notation into the
- * Profile object; `null` means the value doesn't come from the profile directly
- * (files, free-text questions, repeated sections resolved with sectionIndex).
+ * How each kind reads its answer from the Profile. Exhaustive by type, so a new
+ * kind cannot be added without deciding where its value comes from, and
+ * ALL_FIELD_KINDS derives from it.
  */
-export const KIND_TO_PROFILE_PATH: Record<FieldKind, string | null> = {
-  'name.first': 'basics.firstName',
-  'name.last': 'basics.lastName',
-  'name.full': null, // composed: firstName + lastName
-  'contact.email': 'basics.email',
-  'contact.phone': 'basics.phone',
-  'location.city': 'basics.location.city',
-  'location.state': 'basics.location.state',
-  'location.country': 'basics.location.country',
-  'location.postal': 'basics.location.postal',
-  'location.combined': null, // composed: "City, State"
-  'links.linkedin': 'links.linkedin',
-  'links.github': 'links.github',
-  'links.portfolio': 'links.portfolio',
-  'links.other': null,
-  'docs.resume': null, // blob from idb
-  'docs.coverLetter': null,
-  'work.company': null, // repeated section: work[sectionIndex].company
-  'work.title': null,
-  'work.start': null,
-  'work.end': null,
-  'work.description': null,
-  'work.current': null,
-  'edu.school': null,
-  'edu.degree': null,
-  'edu.field': null,
-  'edu.gpa': null,
-  'edu.start': null,
-  'edu.end': null,
-  'auth.workAuthorized': 'workAuth.authorizedUS',
-  'auth.needsSponsorship': 'workAuth.needsSponsorship',
-  'eeo.gender': 'eeo.gender',
-  'eeo.race': 'eeo.race',
-  'eeo.veteran': 'eeo.veteran',
-  'eeo.disability': 'eeo.disability',
-  'eeo.pronouns': 'eeo.pronouns',
-  'comp.expectedSalary': 'preferences.expectedSalary',
-  'misc.availableStart': 'preferences.availableStart',
-  'misc.referralSource': null,
-  'question.freeText': null,
-  'question.choice': null,
-  unknown: null,
+export const PROFILE_VALUE: Record<FieldKind, (profile: Profile) => ProfileValue> = {
+  'name.first': (p) => text(p.basics.firstName),
+  'name.last': (p) => text(p.basics.lastName),
+  'name.full': (p) => text(`${p.basics.firstName} ${p.basics.lastName}`.trim()),
+  'contact.email': (p) => text(p.basics.email),
+  'contact.phone': (p) => text(p.basics.phone),
+  'location.city': (p) => text(p.basics.location.city),
+  'location.state': (p) => text(p.basics.location.state),
+  'location.country': (p) => text(p.basics.location.country),
+  'location.postal': (p) => text(p.basics.location.postal),
+  'location.combined': (p) => {
+    const { city, state, country } = p.basics.location;
+    return text([city, state || country].filter(Boolean).join(', '));
+  },
+  'links.linkedin': (p) => text(p.links.linkedin),
+  'links.github': (p) => text(p.links.github),
+  'links.portfolio': (p) => text(p.links.portfolio),
+  'links.other': none,
+  'docs.resume': none, // the default resume blob, resolved by valueFor
+  'docs.coverLetter': none, // Prompt Studio output — never auto-filled
+  'work.company': (p) => text(p.work[0]?.company ?? ''),
+  'work.title': (p) => text(p.work[0]?.title ?? ''),
+  'work.start': none,
+  'work.end': none,
+  'work.description': none,
+  'work.current': none,
+  'edu.school': none,
+  'edu.degree': none,
+  'edu.field': none,
+  'edu.gpa': none,
+  'edu.start': none,
+  'edu.end': none,
+  'auth.workAuthorized': (p) => p.workAuth.authorizedUS,
+  'auth.needsSponsorship': (p) => p.workAuth.needsSponsorship,
+  'eeo.gender': (p) => text(p.eeo.gender),
+  'eeo.race': (p) => text(p.eeo.race),
+  'eeo.veteran': (p) => text(p.eeo.veteran),
+  'eeo.disability': (p) => text(p.eeo.disability),
+  'eeo.pronouns': (p) => text(p.eeo.pronouns),
+  'comp.expectedSalary': (p) => text(p.preferences.expectedSalary),
+  'misc.availableStart': (p) => text(p.preferences.availableStart),
+  'misc.referralSource': none,
+  'question.freeText': none,
+  'question.choice': none,
+  unknown: none,
 };
+
+export const ALL_FIELD_KINDS = Object.keys(PROFILE_VALUE) as FieldKind[];
 
 /**
  * The LLM mapping tier may ONLY emit these kinds. Core contact/EEO/auth kinds
@@ -109,8 +124,6 @@ export const LLM_ALLOWED_KINDS: ReadonlySet<FieldKind> = new Set([
   'misc.referralSource',
   'unknown',
 ]);
-
-export const ALL_FIELD_KINDS = Object.keys(KIND_TO_PROFILE_PATH) as FieldKind[];
 
 /** Kinds whose review rows get "verify" styling and are never bulk-approved. */
 export const SENSITIVE_KINDS: ReadonlySet<FieldKind> = new Set([

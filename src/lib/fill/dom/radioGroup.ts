@@ -1,3 +1,4 @@
+import type { FillOutcome } from '../../messaging/protocol';
 import { ariaLabelOf, cleanText, explicitLabelFor } from './labelFor';
 import { setNativeChecked } from './setNativeValue';
 import { containsTokens, normalizeForSignature } from '../signature';
@@ -81,18 +82,12 @@ export function radioGroupLabel(radios: HTMLInputElement[], optionLabels: string
   return '';
 }
 
-export interface RadioPickResult {
-  ok: boolean;
-  picked?: string;
-  error?: string;
-}
-
 /**
  * Check the group member matching `wanted` — by value attribute first (what
  * the resolver emits from the discovered options), then by label. Verified by
  * reading `checked` back, like every other write.
  */
-export function pickRadio(member: HTMLInputElement, wanted: string): RadioPickResult {
+export function pickRadio(member: HTMLInputElement, wanted: string): FillOutcome {
   const group = radioGroupOf(member);
   const normWanted = normalizeForSignature(wanted);
   const target =
@@ -106,7 +101,7 @@ export function pickRadio(member: HTMLInputElement, wanted: string): RadioPickRe
 
   setNativeChecked(target, true);
   if (!target.checked) return { ok: false, error: 'radio did not take the selection' };
-  return { ok: true, picked: radioOptionLabel(target) };
+  return { ok: true, verifiedValue: radioOptionLabel(target) };
 }
 
 function commonAncestor(nodes: Element[]): Element | null {

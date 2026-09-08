@@ -5,7 +5,7 @@ import { useFillPlan, type FramePlan } from '@hooks/useFillPlan';
 import { ATS_LABELS } from '@lib/fill/adapters/detect';
 import { ALL_FIELD_KINDS, type FieldKind } from '@lib/schema/fieldKind';
 import type { FillInstruction, PanelToBg, SerializedFile } from '@lib/messaging/protocol';
-import type { ReviewRow } from '@lib/fill/resolver';
+import { unmatchedRow, type ReviewRow } from '@lib/fill/resolver';
 import { loadDocumentAsFile } from '@lib/storage/documents';
 import { checkDealbreakers, type DealbreakerWarning } from '@lib/memory/dealbreakers';
 import { listAnswers, rankAnswers, type AnswerRecord } from '@lib/memory/answers';
@@ -221,9 +221,7 @@ export function FillTab({ state, actions }: { state: PanelState; actions: Action
 async function collectFiles(instructions: FillInstruction[]): Promise<SerializedFile[] | undefined> {
   const blobKeys = new Set<string>();
   for (const instruction of instructions) {
-    if (instruction.action === 'attachFile' && typeof instruction.value === 'object') {
-      blobKeys.add(instruction.value.blobKey);
-    }
+    if (instruction.action === 'attachFile') blobKeys.add(instruction.value.blobKey);
   }
   if (blobKeys.size === 0) return undefined;
   const files: SerializedFile[] = [];
@@ -278,10 +276,7 @@ function FramePlanView({
       {plan.unmatched.length > 0 && (
         <>
           <div className="frame-header">Unrecognized — choose a mapping or enter a value</div>
-          {plan.unmatched.map((field) => renderRow({
-            field, kind: 'unknown', source: 'none', confidence: 0,
-            instruction: null, include: false, requiresReview: true, sensitive: false,
-          }))}
+          {plan.unmatched.map((field) => renderRow(unmatchedRow(field)))}
         </>
       )}
     </Fragment>
@@ -402,9 +397,14 @@ function RowView({
 }
 
 function instructionDisplay(row: ReviewRow): string {
-  const value = row.instruction?.value;
-  if (value === undefined || value === null) return '';
-  if (typeof value === 'boolean') return value ? 'checked' : 'unchecked';
-  if (typeof value === 'object') return value.filename;
-  return value;
+  const instruction = row.instruction;
+  if (!instruction) return '';
+  switch (instruction.action) {
+    case 'setChecked':
+      return instruction.value ? 'checked' : 'unchecked';
+    case 'attachFile':
+      return instruction.value.filename;
+    default:
+      return instruction.value;
+  }
 }

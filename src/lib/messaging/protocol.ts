@@ -4,7 +4,7 @@ import type { AtsId } from '../fill/adapters/ids';
 /** What the content script reports about one form control. The owning frame is
  *  identified by the bg/frameEvent envelope, not the descriptor itself. */
 export interface FormFieldDescriptor {
-  /** nanoid stamped on the element as data-jobpilot-id */
+  /** Id stamped on the element as data-jobpilot-id. */
   fieldId: string;
   control: 'text' | 'textarea' | 'select' | 'combobox' | 'radio' | 'checkbox' | 'file' | 'date';
   label: string;
@@ -15,8 +15,6 @@ export interface FormFieldDescriptor {
   autocomplete?: string;
   required: boolean;
   options?: { value: string; label: string }[];
-  sectionHint?: 'work' | 'education' | 'eeo' | 'auth';
-  sectionIndex?: number;
   /** Adapter-known key, e.g. 'question_12345', '_systemfield_email', a data-automation-id. */
   atsFieldKey?: string;
   /** Stable hash for the mapping cache — see fill/signature.ts. */
@@ -24,15 +22,22 @@ export interface FormFieldDescriptor {
   currentValue?: string;
 }
 
-export type FillAction =
-  | 'setText'
-  | 'selectOption'
-  | 'setChecked'
-  | 'attachFile'
-  | 'pickListbox'
-  | 'setDate';
+/** A stored document to attach; its bytes travel separately as a SerializedFile. */
+export interface FileRef {
+  blobKey: string;
+  filename: string;
+}
 
-export type FillSource = 'adapter' | 'heuristic' | 'cache' | 'llm' | 'answerBank' | 'user';
+/**
+ * What to do to a control, with the value shaped for that action. Keyed on
+ * `action` so the executor can narrow the value instead of casting it.
+ */
+export type FillPayload =
+  | { action: 'setText' | 'selectOption' | 'pickListbox'; value: string }
+  | { action: 'setChecked'; value: boolean }
+  | { action: 'attachFile'; value: FileRef };
+
+export type FillSource = 'adapter' | 'heuristic' | 'cache' | 'llm' | 'user';
 
 /** Files cross runtime ports as base64 — port messages are JSON-serialized,
  *  so ArrayBuffers would silently arrive empty. */
@@ -42,25 +47,25 @@ export interface SerializedFile {
   dataBase64: string;
 }
 
-export interface FillInstruction {
+export type FillInstruction = FillPayload & {
   fieldId: string;
   frameId: number;
-  action: FillAction;
-  value: string | boolean | { blobKey: string; filename: string };
   kind: FieldKind;
   source: FillSource;
   confidence: number;
   /** Always true for question.freeText, answer-bank hits, and low confidence. */
   requiresReview: boolean;
-}
+};
 
-export interface FillResult {
-  fieldId: string;
+/** What happened when one instruction ran, before it is tagged with its field. */
+export interface FillOutcome {
   ok: boolean;
   /** Value read back from the DOM after filling — verification, not hope. */
   verifiedValue?: string;
   error?: string;
 }
+
+export type FillResult = FillOutcome & { fieldId: string };
 
 /* ---------- Port message unions ---------- */
 
@@ -75,7 +80,6 @@ export type CsToBg =
   | { t: 'cs/ready'; atsId: AtsId | null; url: string }
   | { t: 'cs/fields'; fields: FormFieldDescriptor[] }
   | { t: 'cs/fillResults'; results: FillResult[] }
-  | { t: 'cs/wizardStep'; stepId: string }
   /** User activated a submit-looking control — answers snapshotted NOW,
    *  before navigation destroys the form. */
   | { t: 'cs/submitAttempt'; url: string; title: string; answers: CapturedAnswer[] }
@@ -92,8 +96,7 @@ export type BgToCs =
   | { t: 'bg/highlight'; fieldId: string }
   | { t: 'bg/extractJd' }
   /** Resolve the last right-clicked element to a discovered field. */
-  | { t: 'bg/identifyContext' }
-  | { t: 'bg/wizardNext' };
+  | { t: 'bg/identifyContext' };
 
 /** Side panel → background. */
 export type PanelToBg =

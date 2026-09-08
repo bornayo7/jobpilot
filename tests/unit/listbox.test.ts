@@ -7,7 +7,7 @@ it('matches No as a whole word instead of selecting Now', async () => {
   document.body.innerHTML = '<input role="combobox" /><ul role="listbox"><li role="option">Now or later</li><li role="option">No, I do not</li></ul>';
   const options = document.querySelectorAll('li'); const wrong = vi.fn(); const right = vi.fn();
   options[0]!.addEventListener('click', wrong); options[1]!.addEventListener('click', right);
-  expect(await pickFromListbox(document.querySelector('input')!, 'No')).toMatchObject({ ok: true, picked: 'No, I do not' });
+  expect(await pickFromListbox(document.querySelector('input')!, 'No')).toMatchObject({ ok: true, verifiedValue:'No, I do not' });
   expect(wrong).not.toHaveBeenCalled(); expect(right).toHaveBeenCalledOnce();
 });
 
@@ -21,7 +21,7 @@ it('only clicks visible enabled options in the associated listbox', async () => 
     </ul>`;
   const clicked: string[] = [];
   document.querySelectorAll('li').forEach((el, i) => el.addEventListener('click', () => clicked.push(String(i))));
-  expect(await pickFromListbox(document.querySelector('input')!, 'Austin')).toMatchObject({ ok: true, picked: 'Austin, TX' });
+  expect(await pickFromListbox(document.querySelector('input')!, 'Austin')).toMatchObject({ ok: true, verifiedValue:'Austin, TX' });
   expect(clicked).toEqual(['3']);
 });
 

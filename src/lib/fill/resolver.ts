@@ -1,17 +1,15 @@
-import type { FillInstruction, FormFieldDescriptor } from '../messaging/protocol';
-import type { FieldKind } from '../schema/fieldKind';
+import type { FillInstruction, FillSource, FormFieldDescriptor } from '../messaging/protocol';
+import { SENSITIVE_KINDS, type FieldKind } from '../schema/fieldKind';
 import type { Profile } from '../schema/profile';
 import type { Settings } from '../storage/settingsStore';
 import type { AtsId } from './adapters/ids';
 import { adapterFor } from './adapters';
-import type { PrefetchedField } from './adapters/types';
+import type { AtsAdapter, PrefetchedField } from './adapters/types';
 import { heuristicMatch } from './heuristics';
-import { cacheGet, cacheSet } from '../storage/mappingCache';
+import { cacheGet, cacheSet, type MappingEntry } from '../storage/mappingCache';
 import { routeTask } from '../providers/router';
 import { buildFieldMappingRequest, parseFieldMappingResponse } from '../prompts/fieldMapping';
 import { valueFor, type ResumeMeta } from './valueFor';
-import type { FillSource } from '../messaging/protocol';
-import { SENSITIVE_KINDS } from '../schema/fieldKind';
 
 export interface ReviewRow {
   field: FormFieldDescriptor;
@@ -32,11 +30,20 @@ export interface ResolveOutcome {
   llmCalls: number;
 }
 
+/** Which kind a field is, and which tier said so. */
+interface Classification {
+  kind: FieldKind;
+  source: FillSource;
+  confidence: number;
+}
+
 /**
- * The three-tier resolver (runs in the side panel):
+ * The resolver (runs in the side panel). Each field takes the first tier that
+ * answers:
+ *   0. a saved manual correction (overrides everything, adapters included)
  *   1. per-ATS adapter (deterministic selector maps, confidence 1.0)
  *   2. heuristics (label/autocomplete rules, >= 0.8)
- *   3. mapping cache (previous LLM answers + user corrections)
+ *   3. mapping cache (previous model answers for the same field shape)
  *   4. one batched LLM call for the remainder (allowlist-enforced), cached
  * Then values are materialized from the profile with review flags.
  */
@@ -62,75 +69,24 @@ export async function resolveFields(input: {
       prefetched = new Map(schema.map((f) => [f.name, f]));
     }
   }
-
   const enriched = fields.map((field) => enrich(field, prefetched));
 
-  interface Pending {
-    field: FormFieldDescriptor;
-    kind: FieldKind | null;
-    source: FillSource | 'none';
-    confidence: number;
-  }
-
-  // Explicit corrections override every automatic tier, including adapters.
   const cached = await cacheGet(enriched.map((field) => field.signature));
-  const pending: Pending[] = enriched.map((field) => {
-    const correction = cached.get(field.signature);
-    if (correction?.source === 'user-correction') {
-      return { field, kind: correction.kind, source: 'user', confidence: correction.confidence };
-    }
-    const adapterKind = adapter?.classify(field) ?? null;
-    if (adapterKind) return { field, kind: adapterKind, source: 'adapter', confidence: 1 };
-    const heuristic = heuristicMatch(field);
-    if (heuristic) return { field, kind: heuristic.kind, source: 'heuristic', confidence: heuristic.confidence };
-    return { field, kind: null, source: 'none', confidence: 0 };
-  });
-
-  // Tier 3: cache.
-  const unresolved = pending.filter((p) => p.kind === null);
-  if (unresolved.length > 0) {
-    for (const entry of unresolved) {
-      const hit = cached.get(entry.field.signature);
-      if (hit) {
-        entry.kind = hit.kind;
-        entry.source = 'cache';
-        entry.confidence = hit.confidence;
-      }
-    }
+  const classified = new Map<string, Classification>();
+  for (const field of enriched) {
+    const classification = classify(field, adapter, cached.get(field.signature));
+    if (classification) classified.set(field.fieldId, classification);
   }
 
   // Tier 4: one batched LLM call for whatever is left.
   let llmCalls = 0;
-  const stillUnresolved = pending.filter((p) => p.kind === null);
-  if (llmEnabled && stillUnresolved.length > 0) {
+  const leftover = enriched.filter((field) => !classified.has(field.fieldId));
+  if (llmEnabled && leftover.length > 0) {
+    llmCalls = 1;
     try {
-      const { provider, model } = routeTask(settings, 'mapping');
-      const request = buildFieldMappingRequest(stillUnresolved.map((p) => p.field));
-      llmCalls = 1;
-      const response = await provider.chat({
-        model,
-        maxTokens: 1500,
-        temperature: 0,
-        messages: [
-          { role: 'system', content: request.system },
-          { role: 'user', content: request.user },
-        ],
-        jsonSchema: request.jsonSchema,
-      });
-      const mappings = parseFieldMappingResponse(response.text, stillUnresolved.length);
-      const cacheEntries: Parameters<typeof cacheSet>[0] = [];
-      for (const mapping of mappings) {
-        const target = stillUnresolved[mapping.index];
-        if (!target) continue;
-        target.kind = mapping.kind;
-        target.source = 'llm';
-        target.confidence = mapping.confidence;
-        cacheEntries.push({
-          signature: target.field.signature,
-          entry: { kind: mapping.kind, confidence: mapping.confidence, source: 'llm', model },
-        });
+      for (const [field, classification] of await classifyWithModel(settings, leftover)) {
+        classified.set(field.fieldId, classification);
       }
-      await cacheSet(cacheEntries);
     } catch (err) {
       console.warn('[jobpilot] LLM mapping tier failed; continuing without it', err);
     }
@@ -138,50 +94,120 @@ export async function resolveFields(input: {
 
   const rows: ReviewRow[] = [];
   const unmatched: FormFieldDescriptor[] = [];
-
-  for (const entry of pending) {
-    if (entry.kind === null || entry.kind === 'unknown') {
-      unmatched.push(entry.field);
+  for (const field of enriched) {
+    const classification = classified.get(field.fieldId);
+    if (!classification || classification.kind === 'unknown') {
+      unmatched.push(field);
       continue;
     }
-    const sensitive = SENSITIVE_KINDS.has(entry.kind);
-    const resolved = valueFor(entry.kind, entry.field, profile, resume);
-    const alreadyFilled =
-      !!entry.field.currentValue && entry.field.control !== 'file' && entry.field.control !== 'checkbox';
-
-    const requiresReview =
-      sensitive ||
-      entry.kind === 'question.freeText' ||
-      entry.kind === 'question.choice' ||
-      entry.confidence < 0.85 ||
-      (resolved?.requiresReview ?? false);
-
-    const instruction: FillInstruction | null = resolved
-      ? {
-          fieldId: entry.field.fieldId,
-          frameId,
-          action: resolved.action,
-          value: resolved.value,
-          kind: entry.kind,
-          source: entry.source === 'none' ? 'user' : entry.source,
-          confidence: entry.confidence,
-          requiresReview,
-        }
-      : null;
-
-    rows.push({
-      field: entry.field,
-      kind: entry.kind,
-      source: entry.source,
-      confidence: entry.confidence,
-      instruction,
-      include: instruction !== null && !requiresReview && !alreadyFilled,
-      requiresReview,
-      sensitive,
-    });
+    rows.push(reviewRow({ field, ...classification, frameId, profile, resume }));
   }
-
   return { rows, unmatched, llmCalls };
+}
+
+/** Tiers 0–3, in precedence order. Null means the model tier gets a turn. */
+function classify(
+  field: FormFieldDescriptor,
+  adapter: AtsAdapter | null,
+  cached: MappingEntry | undefined,
+): Classification | null {
+  // Explicit corrections override every automatic tier, including adapters.
+  if (cached?.source === 'user-correction') {
+    return { kind: cached.kind, source: 'user', confidence: cached.confidence };
+  }
+  const adapterKind = adapter?.classify(field) ?? null;
+  if (adapterKind) return { kind: adapterKind, source: 'adapter', confidence: 1 };
+  const heuristic = heuristicMatch(field);
+  if (heuristic) return { kind: heuristic.kind, source: 'heuristic', confidence: heuristic.confidence };
+  if (cached) return { kind: cached.kind, source: 'cache', confidence: cached.confidence };
+  return null;
+}
+
+/** One batched, allowlist-enforced model call; every answer is cached for next time. */
+async function classifyWithModel(
+  settings: Settings,
+  fields: FormFieldDescriptor[],
+): Promise<[FormFieldDescriptor, Classification][]> {
+  const { provider, model } = routeTask(settings, 'mapping');
+  const request = buildFieldMappingRequest(fields);
+  const response = await provider.chat({
+    model,
+    maxTokens: 1500,
+    temperature: 0,
+    messages: [
+      { role: 'system', content: request.system },
+      { role: 'user', content: request.user },
+    ],
+    jsonSchema: request.jsonSchema,
+  });
+
+  const results: [FormFieldDescriptor, Classification][] = [];
+  for (const { index, kind, confidence } of parseFieldMappingResponse(response.text, fields.length)) {
+    const field = fields[index];
+    if (field) results.push([field, { kind, source: 'llm', confidence }]);
+  }
+  await cacheSet(
+    results.map(([field, { kind, confidence }]) => ({
+      signature: field.signature,
+      entry: { kind, confidence, source: 'llm', model },
+    })),
+  );
+  return results;
+}
+
+/**
+ * Materialize one classified field into a review row: the profile value, the
+ * review flags, and whether the bulk fill includes it by default. Shared with
+ * the manual kind correction in the fill plan so the two cannot disagree.
+ */
+export function reviewRow(input: {
+  field: FormFieldDescriptor;
+  kind: FieldKind;
+  source: FillSource;
+  confidence: number;
+  frameId: number;
+  profile: Profile;
+  resume: ResumeMeta | null;
+}): ReviewRow {
+  const { field, kind, source, confidence, frameId, profile, resume } = input;
+  const sensitive = SENSITIVE_KINDS.has(kind);
+  const resolved = valueFor(kind, field, profile, resume);
+  const requiresReview =
+    sensitive ||
+    kind === 'question.freeText' ||
+    kind === 'question.choice' ||
+    confidence < 0.85 ||
+    (resolved?.requiresReview ?? false);
+  const instruction: FillInstruction | null = resolved
+    ? { ...resolved, fieldId: field.fieldId, frameId, kind, source, confidence, requiresReview }
+    : null;
+  // A control the page already filled is left alone unless the user opts in.
+  const alreadyFilled = !!field.currentValue && field.control !== 'file' && field.control !== 'checkbox';
+
+  return {
+    field,
+    kind,
+    source,
+    confidence,
+    instruction,
+    include: instruction !== null && !requiresReview && !alreadyFilled,
+    requiresReview,
+    sensitive,
+  };
+}
+
+/** A field no tier could classify, shown so the user can map it or fill it by hand. */
+export function unmatchedRow(field: FormFieldDescriptor): ReviewRow {
+  return {
+    field,
+    kind: 'unknown',
+    source: 'none',
+    confidence: 0,
+    instruction: null,
+    include: false,
+    requiresReview: true,
+    sensitive: false,
+  };
 }
 
 /** Overlay authoritative API data (label/options/required) onto a scraped descriptor. */
