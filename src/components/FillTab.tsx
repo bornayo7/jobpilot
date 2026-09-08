@@ -1,16 +1,15 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { browser } from '#imports';
 import type { PanelActions, PanelState } from '@hooks/useBackgroundPort';
-import { useFillPlan, type FramePlan } from '@hooks/useFillPlan';
+import { useFillPlan } from '@hooks/useFillPlan';
 import { ATS_LABELS } from '@lib/fill/adapters/detect';
-import { ALL_FIELD_KINDS, type FieldKind } from '@lib/schema/fieldKind';
 import type { FillInstruction, SerializedFile } from '@lib/messaging/protocol';
-import { unmatchedRow, type ReviewRow } from '@lib/fill/resolver';
 import { loadDocumentAsFile } from '@lib/storage/documents';
 import { checkDealbreakers, type DealbreakerWarning } from '@lib/memory/dealbreakers';
-import { listAnswers, rankAnswers, type AnswerRecord } from '@lib/memory/answers';
+import { listAnswers, type AnswerRecord } from '@lib/memory/answers';
 import { companyFromUrl } from '@lib/tracker/detect';
 import { findPreviousApplications, listJobs, type TrackerJob } from '@lib/tracker/store';
+import { FramePlanView } from './FramePlanView';
 
 export function FillTab({ state, actions }: { state: PanelState; actions: PanelActions }) {
   const { profile, settings, resume, plans, toggleInclude, editValue, editKind } = useFillPlan(state);
@@ -222,181 +221,4 @@ async function collectFiles(instructions: FillInstruction[]): Promise<Serialized
     if (file) files.push(file);
   }
   return files;
-}
-
-function FramePlanView({
-  frameLabel,
-  plan,
-  fillResults,
-  answerBank,
-  onHover,
-  onToggle,
-  onValue,
-  onKind,
-}: {
-  frameLabel: string | null;
-  plan: FramePlan;
-  fillResults: PanelState['fillResults'];
-  answerBank: AnswerRecord[];
-  onHover: (fieldId: string) => void;
-  onToggle: (fieldId: string) => void;
-  onValue: (fieldId: string, text: string) => void;
-  onKind: (fieldId: string, kind: FieldKind) => void;
-}) {
-  const autoRows = plan.rows.filter((row) => !row.requiresReview);
-  const reviewRows = plan.rows.filter((row) => row.requiresReview);
-
-  const renderRow = (row: ReviewRow) => (
-    <RowView
-      key={row.field.fieldId}
-      row={row}
-      result={fillResults.get(row.field.fieldId)}
-      answerBank={answerBank}
-      onHover={onHover}
-      onToggle={onToggle}
-      onValue={onValue}
-      onKind={onKind}
-    />
-  );
-
-  return (
-    <Fragment>
-      {frameLabel && <div className="frame-header">{frameLabel}</div>}
-      {autoRows.map(renderRow)}
-      {reviewRows.length > 0 && <div className="frame-header">Needs your review</div>}
-      {reviewRows.map(renderRow)}
-      {plan.unmatched.length > 0 && (
-        <>
-          <div className="frame-header">Unrecognized — choose a mapping or enter a value</div>
-          {plan.unmatched.map((field) => renderRow(unmatchedRow(field)))}
-        </>
-      )}
-    </Fragment>
-  );
-}
-
-function RowView({
-  row,
-  result,
-  answerBank,
-  onHover,
-  onToggle,
-  onValue,
-  onKind,
-}: {
-  row: ReviewRow;
-  result?: { ok: boolean; error?: string };
-  answerBank: AnswerRecord[];
-  onHover: (fieldId: string) => void;
-  onToggle: (fieldId: string) => void;
-  onValue: (fieldId: string, text: string) => void;
-  onKind: (fieldId: string, kind: FieldKind) => void;
-}) {
-  const fieldId = row.field.fieldId;
-  const valueText = instructionDisplay(row);
-  const fillable = row.instruction !== null;
-  const isQuestion = row.kind === 'question.freeText' || row.kind === 'question.choice';
-  const suggestions = isQuestion
-    ? rankAnswers(row.field.label || row.field.ariaLabel || '', answerBank, '')
-    : [];
-
-  return (
-    <div
-      id={`row-${fieldId}`}
-      className={`review-row${row.sensitive ? ' sensitive' : ''}${row.include ? '' : ' excluded'}`}
-      onMouseEnter={() => onHover(fieldId)}
-    >
-      <div className="review-top">
-        <label className="include">
-          <input type="checkbox" checked={row.include} disabled={!fillable} onChange={() => onToggle(fieldId)} />
-          <span className="field-label" title={row.field.label}>
-            {row.field.label || row.field.name || '(unlabeled)'}
-          </span>
-          {row.field.required && <span className="req">*</span>}
-        </label>
-        <div className="field-meta">
-          <span className={`chip source-${row.source}`}>{row.source}</span>
-          {row.sensitive && <span className="chip warn">verify</span>}
-          {result && (
-            <span className={result.ok ? 'chip ok' : 'chip fail'} title={result.error}>
-              {result.ok ? '✓ filled' : `✗ ${result.error ?? 'failed'}`}
-            </span>
-          )}
-        </div>
-      </div>
-      <div className="review-controls">
-        {row.field.control === 'file' || row.instruction?.action === 'attachFile' ? (
-          <span className="value-static">{valueText || 'no file'}</span>
-        ) : row.field.control === 'checkbox' ? (
-          <select
-            value={valueText === 'checked' ? 'checked' : 'unchecked'}
-            onChange={(e) => onValue(fieldId, e.target.value === 'checked' ? 'yes' : 'no')}
-          >
-            <option value="checked">checked</option>
-            <option value="unchecked">unchecked</option>
-          </select>
-        ) : (row.field.control === 'select' || row.field.control === 'radio') && row.field.options?.length ? (
-          <select
-            value={typeof row.instruction?.value === 'string' ? row.instruction.value : ''}
-            onChange={(e) => onValue(fieldId, e.target.value)}
-          >
-            <option value="">(leave blank)</option>
-            {row.field.options.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        ) : isQuestion ? (
-          <textarea
-            className="paste-area"
-            rows={2}
-            value={valueText}
-            placeholder="(type an answer, or use a saved one below)"
-            onChange={(e) => onValue(fieldId, e.target.value)}
-          />
-        ) : (
-          <input
-            value={valueText}
-            placeholder="(no value — type to fill)"
-            onChange={(e) => onValue(fieldId, e.target.value)}
-          />
-        )}
-        <select className="kind-select" value={row.kind} onChange={(e) => onKind(fieldId, e.target.value as FieldKind)}>
-          {ALL_FIELD_KINDS.map((kind) => (
-            <option key={kind} value={kind}>
-              {kind}
-            </option>
-          ))}
-        </select>
-      </div>
-      {suggestions.length > 0 && (
-        <div className="suggestion-row">
-          {suggestions.map(({ record, score }) => (
-            <button
-              key={record.id}
-              className="suggestion"
-              title={record.answer}
-              onClick={() => onValue(fieldId, record.answer)}
-            >
-              ↳ {Math.round(score * 100)}% · {record.company || 'saved'} · {record.answer.slice(0, 44)}…
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function instructionDisplay(row: ReviewRow): string {
-  const instruction = row.instruction;
-  if (!instruction) return '';
-  switch (instruction.action) {
-    case 'setChecked':
-      return instruction.value ? 'checked' : 'unchecked';
-    case 'attachFile':
-      return instruction.value.filename;
-    default:
-      return instruction.value;
-  }
 }
