@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { decryptBackup, encryptBackup, type BackupEnvelope } from '@lib/util/backup';
-import { gatherBackupPayload, restoreBackupPayload, type BackupPayload } from '@lib/util/backupStore';
+import { gatherBackupPayload, restoreBackupPayload, type BackupPayload } from '@lib/storage/backupStore';
 import { downloadFile } from '@lib/util/download';
 
 /**

@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { getDb } from '@lib/storage/db';
-import { gatherBackupPayload, restoreBackupPayload } from '@lib/util/backupStore';
+import { gatherBackupPayload, restoreBackupPayload } from '@lib/storage/backupStore';
 import { loadProfile } from '@lib/storage/profileStore';
 
 beforeEach(async () => {

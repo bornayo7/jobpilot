@@ -1,12 +1,12 @@
 import { browser } from '#imports';
-import { getDb, JOB_STATUSES } from '../storage/db';
-import { arrayBufferToBase64, base64ToUint8Array } from './base64';
+import { getDb, JOB_STATUSES } from './db';
+import { arrayBufferToBase64, base64ToUint8Array } from '../util/base64';
 import { z } from 'zod';
 import { ProfileSchema } from '../schema/profile';
 import { ResumeVersionSchema } from '../schema/resumeVersion';
-import { SETTINGS_KEY, SettingsSchema } from '../storage/settingsStore';
-import { PROFILES_KEY, loadContainer } from '../storage/profileStore';
-import { MAPPING_CACHE_KEY } from '../storage/mappingCache';
+import { SETTINGS_KEY, SettingsSchema } from './settingsStore';
+import { PROFILES_KEY, loadContainer } from './profileStore';
+import { MAPPING_CACHE_KEY } from './mappingCache';
 import { ALL_FIELD_KINDS, type FieldKind } from '../schema/fieldKind';
 
 /**

@@ -144,18 +144,20 @@ entrypoints/
   sidepanel/            The main UI (Fill · Generate · Tracker · Answers · Settings)
   options/              Profile editor, document store, import, backup
 src/
-  components/           Side-panel tabs and options-page cards
-  hooks/                Background port connection; fill-plan resolution
+  components/           Side-panel tabs, the fill review table, the version library
+    profile/            Options-page profile editor, one card per section
+  hooks/                Background port; fill-plan resolution; live profile and settings
 src/lib/
-  fill/                 Discovery, the four-stage resolver, executor, DOM helpers
-    adapters/           Per-ATS classification and API prefetch
-  generation/           PDF and DOCX rendering, paste-back import, ATS validation
+  fill/                 Discovery, the resolver tiers, executor, DOM helpers
+    adapters/           ATS identity, per-ATS classification, API prefetch
+  generation/           PDF and DOCX rendering, paste-back import, ATS validation, version filing
   prompts/promptStudio/ Prompt builders and the writing-style guide
   providers/            Anthropic, OpenAI-compatible, Ollama, LM Studio, SSE parsing
   memory/               Answers bank, dealbreakers, match gaps
-  tracker/              Confirmation detection and the application store
-  storage/              chrome.storage and IndexedDB layers
-  schema/               Zod schemas, field-kind vocabulary, migrations
+  tracker/              Confirmation detection, submit/confirmation pairing, the application store
+  storage/              chrome.storage and IndexedDB layers, stored record types, backup gather/restore
+  schema/               Zod schemas, field-kind vocabulary and profile getters, migrations
+  util/                 Backup encryption, base64, downloads, fuzzy matching
 tests/unit/             Vitest suite
 ```
 
