@@ -10,7 +10,7 @@ vi.mock('@lib/generation/renderDocx', () => ({ renderResumeDocx: vi.fn() }));
 vi.mock('@lib/generation/renderCoverLetterPdf', () => ({ renderCoverLetterPdf: vi.fn() }));
 vi.mock('@lib/storage/versions', () => ({ listVersions: async () => [], saveVersion: mocks.save }));
 import { GenerateTab } from '@components/GenerateTab';
-import { ImportProfileCard } from '@components/ImportProfileCard';
+import { ImportProfileCard } from '@components/profile/ImportProfileCard';
 import { emptyProfile } from '@lib/schema/profile';
 let root: Root; let host: HTMLDivElement;
 const state: PanelState = { tabId: 1, tabUrl: 'https://example.com/a', frames: new Map(), fillResults: new Map(), focusField: null, jd: { title: 'Job', text: 'Description' } };

@@ -1,19 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Profile } from '@lib/schema/profile';
 import {
   deleteDocument,
   listDocuments,
   storeDocument,
   type StoredDocMeta,
 } from '@lib/storage/documents';
+import type { CardProps } from './fields';
 
-export function DocumentsCard({
-  profile,
-  update,
-}: {
-  profile: Profile;
-  update: (patch: Partial<Profile>) => void;
-}) {
+export function DocumentsCard({ profile, update }: CardProps) {
   const [docs, setDocs] = useState<StoredDocMeta[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 

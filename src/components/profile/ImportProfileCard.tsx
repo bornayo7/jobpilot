@@ -1,24 +1,18 @@
 import { useState } from 'react';
-import type { Profile } from '@lib/schema/profile';
 import { buildProfileImportPrompt } from '@lib/prompts/promptStudio/builders';
 import {
   mergeProfileImport,
   parseProfilePaste,
   type ProfileImportOutcome,
 } from '@lib/generation/importProfile';
+import type { CardProps } from './fields';
 
 /**
  * Onboarding shortcut: copy a conversion prompt, paste your existing resume
  * into claude.ai / ChatGPT under it, paste the JSON reply back here — profile
  * seeded in two minutes instead of typed by hand.
  */
-export function ImportProfileCard({
-  profile,
-  update,
-}: {
-  profile: Profile;
-  update: (patch: Partial<Profile>) => void;
-}) {
+export function ImportProfileCard({ profile, update }: CardProps) {
   const [copied, setCopied] = useState(false);
   const [pasted, setPasted] = useState('');
   const [outcome, setOutcome] = useState<ProfileImportOutcome | null>(null);
