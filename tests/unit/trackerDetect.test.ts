@@ -16,11 +16,11 @@ describe('companyFromUrl', () => {
     ['https://acme.wd5.myworkdayjobs.com/en-US/External/job/x', 'Acme'],
     ['https://careers-nvidia.icims.com/jobs/123/apply', 'Nvidia'],
   ])('%s -> %s', (url, company) => {
-    expect(companyFromUrl(url).company).toBe(company);
+    expect(companyFromUrl(url)).toBe(company);
   });
 
   it('falls back to the host for unknown sites', () => {
-    expect(companyFromUrl('https://www.example.com/careers/apply').company).toBe('example.com');
+    expect(companyFromUrl('https://www.example.com/careers/apply')).toBe('example.com');
   });
 });
 

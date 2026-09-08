@@ -2,7 +2,7 @@ import type { FillInstruction, FillSource, FormFieldDescriptor } from '../messag
 import { SENSITIVE_KINDS, type FieldKind } from '../schema/fieldKind';
 import type { Profile } from '../schema/profile';
 import type { Settings } from '../storage/settingsStore';
-import type { AtsId } from './adapters/ids';
+import type { AtsId } from './adapters/detect';
 import { adapterFor } from './adapters';
 import type { AtsAdapter, PrefetchedField } from './adapters/types';
 import { heuristicMatch } from './heuristics';

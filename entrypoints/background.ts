@@ -9,7 +9,7 @@ import {
   type CsToBg,
   type PanelToBg,
 } from '@lib/messaging/protocol';
-import type { AtsId } from '@lib/fill/adapters/ids';
+import type { AtsId } from '@lib/fill/adapters/detect';
 import { cleanJobTitle, companyFromUrl } from '@lib/tracker/detect';
 import { createJob } from '@lib/tracker/store';
 import { saveAnswer } from '@lib/memory/answers';
@@ -80,7 +80,7 @@ export default defineBackground(() => {
     pendingAttempts.delete(tabId);
 
     const sourceUrl = fresh?.url ?? detected.url;
-    const { company } = companyFromUrl(sourceUrl);
+    const company = companyFromUrl(sourceUrl);
     const title = cleanJobTitle(fresh?.title || detected.title);
 
     let resumeName: string | undefined;

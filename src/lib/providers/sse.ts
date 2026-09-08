@@ -43,34 +43,6 @@ export async function* sseEvents(response: Response): AsyncGenerator<string> {
   }
 }
 
-/** Parse newline-delimited JSON streams (Ollama's native format). */
-export async function* ndjsonLines(response: Response): AsyncGenerator<string> {
-  const body = response.body;
-  if (!body) return;
-
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let newlineIndex: number;
-      while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-        const line = buffer.slice(0, newlineIndex).trim();
-        buffer = buffer.slice(newlineIndex + 1);
-        if (line) yield line;
-      }
-    }
-    const tail = buffer.trim();
-    if (tail) yield tail;
-  } finally {
-    await cancel(reader);
-  }
-}
-
 /**
  * Consumers normally break out of the loop on `[DONE]` rather than draining the
  * body, which runs the generator's finally clause. Releasing the lock alone

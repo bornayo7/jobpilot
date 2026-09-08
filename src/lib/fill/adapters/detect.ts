@@ -1,4 +1,24 @@
-import type { AtsId } from './ids';
+/** The applicant-tracking systems JobPilot recognizes by host. */
+export type AtsId =
+  | 'greenhouse'
+  | 'lever'
+  | 'ashby'
+  | 'workday'
+  | 'icims'
+  | 'smartrecruiters'
+  | 'linkedin'
+  | 'indeed';
+
+export const ATS_LABELS: Record<AtsId, string> = {
+  greenhouse: 'Greenhouse',
+  lever: 'Lever',
+  ashby: 'Ashby',
+  workday: 'Workday',
+  icims: 'iCIMS',
+  smartrecruiters: 'SmartRecruiters',
+  linkedin: 'LinkedIn',
+  indeed: 'Indeed',
+};
 
 /**
  * Detect which ATS a frame belongs to from its host (+ path for hosts that
@@ -21,14 +41,3 @@ export function detectAts(host: string, path: string): AtsId | null {
 
   return null;
 }
-
-export const ATS_LABELS: Record<AtsId, string> = {
-  greenhouse: 'Greenhouse',
-  lever: 'Lever',
-  ashby: 'Ashby',
-  workday: 'Workday',
-  icims: 'iCIMS',
-  smartrecruiters: 'SmartRecruiters',
-  linkedin: 'LinkedIn',
-  indeed: 'Indeed',
-};

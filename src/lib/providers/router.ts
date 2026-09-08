@@ -49,3 +49,23 @@ export function routeTask(settings: Settings, task: LlmTask): { provider: ChatPr
   const ref = settings.routing[task];
   return { provider: providerFor(settings, ref), model: ref.model };
 }
+
+/**
+ * Whether the task's provider can be called at all: hosted providers need
+ * their key, local servers need nothing, and chrome-ai is not wired up.
+ */
+export function taskConfigured(settings: Settings, task: LlmTask): boolean {
+  switch (settings.routing[task].provider) {
+    case 'anthropic':
+      return settings.anthropicKey !== '';
+    case 'openai':
+      return settings.openaiKey !== '';
+    case 'openrouter':
+      return settings.openrouterKey !== '';
+    case 'ollama':
+    case 'lmstudio':
+      return true;
+    case 'chrome-ai':
+      return false;
+  }
+}

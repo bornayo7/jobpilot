@@ -1,5 +1,5 @@
 import type { FormFieldDescriptor } from '../messaging/protocol';
-import type { AtsId } from './adapters/ids';
+import type { AtsId } from './adapters/detect';
 import { deepQuerySelectorAll } from './dom/deepQuery';
 import { labelFor } from './dom/labelFor';
 import { radioGroupLabel, radioGroupOf, radioOptionLabel } from './dom/radioGroup';

@@ -34,7 +34,6 @@ export interface ProviderHealth {
 export interface ChatProvider {
   id: ProviderId;
   chat(req: ChatRequest, opts?: ChatOptions): Promise<ChatResponse>;
-  listModels?(): Promise<{ id: string; label: string }[]>;
   health?(): Promise<ProviderHealth>;
 }
 

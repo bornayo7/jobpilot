@@ -1,5 +1,5 @@
 import type { FieldKind } from '../schema/fieldKind';
-import type { AtsId } from '../fill/adapters/ids';
+import type { AtsId } from '../fill/adapters/detect';
 
 /** What the content script reports about one form control. The owning frame is
  *  identified by the bg/frameEvent envelope, not the descriptor itself. */

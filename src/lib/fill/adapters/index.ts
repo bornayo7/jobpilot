@@ -1,5 +1,5 @@
 import type { AtsAdapter } from './types';
-import type { AtsId } from './ids';
+import type { AtsId } from './detect';
 import { greenhouseAdapter } from './greenhouse';
 import { leverAdapter } from './lever';
 import { ashbyAdapter } from './ashby';
@@ -15,6 +15,3 @@ const ADAPTERS: Partial<Record<AtsId, AtsAdapter>> = {
 export function adapterFor(atsId: AtsId | null): AtsAdapter | null {
   return atsId ? (ADAPTERS[atsId] ?? null) : null;
 }
-
-export { detectAts, ATS_LABELS } from './detect';
-export type { AtsAdapter, PrefetchedField } from './types';

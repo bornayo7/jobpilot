@@ -194,7 +194,7 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Ac
     // job.title is the page title ("Software Engineer Intern — Careers"), not
     // the employer. Derive the company from the ATS URL the way the tracker
     // does, and keep the page title only as a fallback.
-    const company = companyFromUrl(job.url).company || job.title;
+    const company = companyFromUrl(job.url) || job.title;
 
     setRenderProblems([]);
 

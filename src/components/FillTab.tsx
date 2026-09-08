@@ -56,7 +56,7 @@ export function FillTab({ state, actions }: { state: PanelState; actions: Action
 
   // Duplicate-application guard: have you applied to this company before?
   useEffect(() => {
-    const { company } = companyFromUrl(state.tabUrl);
+    const company = companyFromUrl(state.tabUrl);
     if (!company) {
       setPreviousApps([]);
       return;

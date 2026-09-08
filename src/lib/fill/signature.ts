@@ -1,5 +1,5 @@
 import type { FormFieldDescriptor } from '../messaging/protocol';
-import type { AtsId } from './adapters/ids';
+import type { AtsId } from './adapters/detect';
 
 /**
  * Stable identity for a form field ACROSS jobs and companies on the same ATS.

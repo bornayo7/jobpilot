@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ndjsonLines, sseEvents } from '@lib/providers/sse';
+import { sseEvents } from '@lib/providers/sse';
 
 function responseFromChunks(chunks: string[]): Response {
   const encoder = new TextEncoder();
@@ -37,12 +37,5 @@ describe('sseEvents', () => {
   it('joins multi-line data payloads', async () => {
     const res = responseFromChunks(['data: line1\ndata: line2\n\n']);
     expect(await collect(sseEvents(res))).toEqual(['line1\nline2']);
-  });
-});
-
-describe('ndjsonLines', () => {
-  it('yields complete lines including an unterminated tail', async () => {
-    const res = responseFromChunks(['{"x":1}\n{"y"', ':2}\n{"z":3}']);
-    expect(await collect(ndjsonLines(res))).toEqual(['{"x":1}', '{"y":2}', '{"z":3}']);
   });
 });

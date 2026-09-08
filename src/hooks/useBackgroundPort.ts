@@ -10,7 +10,7 @@ import {
   type PanelToBg,
   type SerializedFile,
 } from '@lib/messaging/protocol';
-import type { AtsId } from '@lib/fill/adapters/ids';
+import type { AtsId } from '@lib/fill/adapters/detect';
 
 export interface FrameState {
   atsId: AtsId | null;

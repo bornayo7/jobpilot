@@ -86,13 +86,6 @@ export function openaiCompatibleProvider(config: CompatConfig): ChatProvider {
       };
     },
 
-    async listModels() {
-      const res = await fetch(modelsUrl, { headers: headers() });
-      if (!res.ok) throw new ProviderError(`${config.id} models ${res.status}`, res.status);
-      const json: any = await res.json();
-      return (json.data ?? []).map((m: any) => ({ id: m.id, label: m.id }));
-    },
-
     async health() {
       const res = await fetch(modelsUrl, { headers: headers() }).catch(() => null);
       if (!res) return { ok: false, hint: config.healthHint?.('network') ?? 'Network error.' };

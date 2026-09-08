@@ -9,6 +9,7 @@ import { resolveFields, reviewRow, unmatchedRow, type ResolveOutcome, type Revie
 import type { ResumeMeta } from '@lib/fill/valueFor';
 import type { FieldKind } from '@lib/schema/fieldKind';
 import { cacheSet } from '@lib/storage/mappingCache';
+import { taskConfigured } from '@lib/providers/router';
 import type { FillInstruction } from '@lib/messaging/protocol';
 
 export interface FramePlan {
@@ -92,13 +93,7 @@ export function useFillPlan(state: PanelState) {
       return next.size === prev.size ? prev : next;
     });
     if (!profile || !settings || resume === undefined) return;
-    // A key configured for the mapping provider (or a local provider) enables tier 4.
-    const llmEnabled =
-      (settings.routing.mapping.provider === 'anthropic' && !!settings.anthropicKey) ||
-      (settings.routing.mapping.provider === 'openai' && !!settings.openaiKey) ||
-      (settings.routing.mapping.provider === 'openrouter' && !!settings.openrouterKey) ||
-      settings.routing.mapping.provider === 'ollama' ||
-      settings.routing.mapping.provider === 'lmstudio';
+    const llmEnabled = taskConfigured(settings, 'mapping');
 
     for (const [frameId, frame] of state.frames) {
       if (frame.fields.length === 0) continue;

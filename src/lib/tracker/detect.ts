@@ -1,4 +1,3 @@
-import type { AtsId } from '../fill/adapters/ids';
 import { detectAts } from '../fill/adapters/detect';
 
 /**
@@ -28,39 +27,32 @@ export function looksLikeSubmitButton(text: string): boolean {
   return SUBMIT_BUTTON.test(text.trim().replace(/\s+/g, ' '));
 }
 
-/** Derive the employer name from ATS URL structure. */
-export function companyFromUrl(rawUrl: string): { company: string; atsId: AtsId | null } {
+/** Derive the employer name from ATS URL structure; '' when the URL is unusable. */
+export function companyFromUrl(rawUrl: string): string {
   let url: URL;
   try {
     url = new URL(rawUrl);
   } catch {
-    return { company: '', atsId: null };
+    return '';
   }
-  const atsId = detectAts(url.host, url.pathname);
   const segment = (index: number) => decodeURIComponent(url.pathname.split('/').filter(Boolean)[index] ?? '');
 
-  switch (atsId) {
+  switch (detectAts(url.host, url.pathname)) {
     case 'lever':
     case 'ashby':
-      return { company: titleCase(segment(0)), atsId };
-    case 'greenhouse': {
-      if (url.pathname.startsWith('/embed/job_app')) {
-        return { company: titleCase(url.searchParams.get('for') ?? ''), atsId };
-      }
-      return { company: titleCase(segment(0)), atsId };
-    }
-    case 'workday': {
-      const tenant = url.host.split('.')[0] ?? '';
-      return { company: titleCase(tenant), atsId };
-    }
+    case 'smartrecruiters':
+      return titleCase(segment(0));
+    case 'greenhouse':
+      if (url.pathname.startsWith('/embed/job_app')) return titleCase(url.searchParams.get('for') ?? '');
+      return titleCase(segment(0));
+    case 'workday':
+      return titleCase(url.host.split('.')[0] ?? '');
     case 'icims': {
       const match = url.host.match(/^(?:careers|jobs)[-.]([^.]+)\.icims\.com$/);
-      return { company: titleCase(match?.[1] ?? url.host), atsId };
+      return titleCase(match?.[1] ?? url.host);
     }
-    case 'smartrecruiters':
-      return { company: titleCase(segment(0)), atsId };
     default:
-      return { company: url.host.replace(/^www\./, ''), atsId };
+      return url.host.replace(/^www\./, '');
   }
 }
 

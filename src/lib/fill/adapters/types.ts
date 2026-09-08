@@ -1,6 +1,6 @@
 import type { FormFieldDescriptor } from '../../messaging/protocol';
 import type { FieldKind } from '../../schema/fieldKind';
-import type { AtsId } from './ids';
+import type { AtsId } from './detect';
 
 /** Authoritative field info prefetched from an ATS API (Greenhouse Job Board API). */
 export interface PrefetchedField {
