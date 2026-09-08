@@ -2,7 +2,8 @@ import { browser } from '#imports';
 import type { Browser } from 'wxt/browser';
 import { CS_PORT, type BgToCs, type CsToBg } from '@lib/messaging/protocol';
 import { detectAts } from '@lib/fill/adapters/detect';
-import { discoverFields, observeFields, findByFieldId, FIELD_ID_ATTR } from '@lib/fill/discovery';
+import { discoverFields, observeFields, fieldIdAt, findByFieldId } from '@lib/fill/discovery';
+import { flashField } from '@lib/fill/dom/highlight';
 import { executeInstructions } from '@lib/fill/executor';
 import { captureAnswers } from '@lib/fill/captureAnswers';
 import { looksLikeConfirmation, looksLikeSubmitButton } from '@lib/tracker/detect';
@@ -98,27 +99,11 @@ export default defineContentScript({
         }
         case 'bg/highlight': {
           const el = findByFieldId(msg.fieldId);
-          if (el) {
-            el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-            const prevOutline = el.style.outline;
-            const prevOffset = el.style.outlineOffset;
-            el.style.outline = '2px solid #e8590c';
-            el.style.outlineOffset = '2px';
-            setTimeout(() => {
-              el.style.outline = prevOutline;
-              el.style.outlineOffset = prevOffset;
-            }, 1600);
-          }
+          if (el) flashField(el);
           break;
         }
         case 'bg/identifyContext': {
-          const target = lastContextTarget;
-          if (!target) break;
-          const stamped =
-            target.closest<HTMLElement>(`[${FIELD_ID_ATTR}]`) ??
-            target.closest('label, li, fieldset, div')?.querySelector<HTMLElement>(`[${FIELD_ID_ATTR}]`) ??
-            null;
-          const fieldId = stamped?.getAttribute(FIELD_ID_ATTR);
+          const fieldId = lastContextTarget ? fieldIdAt(lastContextTarget) : null;
           if (fieldId) post({ t: 'cs/contextField', fieldId });
           break;
         }

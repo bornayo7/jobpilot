@@ -104,6 +104,19 @@ export function findByFieldId(fieldId: string): HTMLElement | null {
   return matches.find((el) => !isUnavailable(el)) ?? matches[0] ?? null;
 }
 
+/**
+ * The discovered field a right-click landed on: the stamped control itself,
+ * or the one inside the label/row the click hit. Chrome's context-menu API
+ * never identifies the element, so the content script remembers the target.
+ */
+export function fieldIdAt(target: Element): string | null {
+  const stamped =
+    target.closest<HTMLElement>(`[${FIELD_ID_ATTR}]`) ??
+    target.closest('label, li, fieldset, div')?.querySelector<HTMLElement>(`[${FIELD_ID_ATTR}]`) ??
+    null;
+  return stamped?.getAttribute(FIELD_ID_ATTR) ?? null;
+}
+
 /** One descriptor for a whole radio group; every member carries the same id so
  *  the right-click "fix this field" flow resolves from any button. */
 function describeRadioGroup(atsId: AtsId | null, group: HTMLInputElement[]): FormFieldDescriptor | null {

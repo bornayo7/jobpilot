@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { discoverFields } from '@lib/fill/discovery';
+import { discoverFields, fieldIdAt } from '@lib/fill/discovery';
 
 describe('discoverFields', () => {
   beforeEach(() => {
@@ -116,6 +116,17 @@ describe('discoverFields', () => {
     );
     expect(new Set(ids).size).toBe(1);
     expect(discoverFields(null)[0]!.fieldId).toBe(auth!.fieldId);
+  });
+
+  it('resolves a right-click on a control, or on text in its row, to the discovered field', () => {
+    document.body.innerHTML = `
+      <div class="row"><span>Email</span><input name="email" /></div>
+      <p>Unrelated text</p>
+    `;
+    const [field] = discoverFields(null);
+    expect(fieldIdAt(document.querySelector('input')!)).toBe(field!.fieldId);
+    expect(fieldIdAt(document.querySelector('span')!)).toBe(field!.fieldId);
+    expect(fieldIdAt(document.querySelector('p')!)).toBeNull();
   });
 
   it('surfaces Workday-style data-automation-id as atsFieldKey', () => {
