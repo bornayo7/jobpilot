@@ -5,27 +5,28 @@ import {
   PANEL_PORT,
   type BgToCs,
   type BgToPanel,
-  type CapturedAnswer,
   type CsToBg,
   type PanelToBg,
 } from '@lib/messaging/protocol';
 import type { AtsId } from '@lib/fill/adapters/detect';
-import { cleanJobTitle, companyFromUrl } from '@lib/tracker/detect';
-import { createJob } from '@lib/tracker/store';
-import { saveAnswer } from '@lib/memory/answers';
-import { loadProfile } from '@lib/storage/profileStore';
-import { getDb } from '@lib/storage/db';
+import { SubmissionTracker } from '@lib/tracker/submissions';
 
 const CONTEXT_MENU_ID = 'jobpilot-fix-field';
-const ATTEMPT_TTL_MS = 20 * 60 * 1000;
 
 type Port = Browser.runtime.Port;
+
+/** One connected content script. `ready` is what its cs/ready reported, once it has. */
+interface Frame {
+  port: Port;
+  ready: { atsId: AtsId | null; url: string } | null;
+}
 
 /**
  * The service worker is a pure event router. Ports and frame metadata live in
  * module scope — if Chrome kills the worker, every port dies with it and both
  * sides (content scripts, side panel) reconnect, repopulating this state. No
- * durable state lives here; everything durable is in storage.
+ * durable state lives here; what a confirmation writes goes through the
+ * tracker layer.
  */
 export default defineBackground(() => {
   // Toolbar click opens the side panel. Must be registered synchronously.
@@ -33,14 +34,47 @@ export default defineBackground(() => {
     ?.setPanelBehavior({ openPanelOnActionClick: true })
     .catch((err: unknown) => console.error('[jobpilot] setPanelBehavior failed', err));
 
-  const frameKey = (tabId: number, frameId: number) => `${tabId}:${frameId}`;
-
-  const csPorts = new Map<string, Port>();
-  const frameMeta = new Map<string, { atsId: AtsId | null; url: string }>();
+  /** tabId -> frameId -> connected content script. */
+  const frames = new Map<number, Map<number, Frame>>();
   /** port -> the tab it shows and the window it lives in (null = unknown). */
-  const panelPorts = new Map<Port, { tabId: number | null; windowId: number | null }>();
-  /** Submit-attempt snapshots awaiting a confirmation page, per tab. */
-  const pendingAttempts = new Map<number, { url: string; title: string; answers: CapturedAnswer[]; at: number }>();
+  const panels = new Map<Port, { tabId: number | null; windowId: number | null }>();
+  const submissions = new SubmissionTracker();
+
+  const framesOf = (tabId: number) => frames.get(tabId) ?? new Map<number, Frame>();
+  const panelsOn = (tabId: number) => [...panels].filter(([, attached]) => attached.tabId === tabId).map(([port]) => port);
+
+  const sendToPanel = (port: Port, msg: BgToPanel) => {
+    try {
+      port.postMessage(msg);
+    } catch {
+      panels.delete(port);
+    }
+  };
+
+  const sendToFrame = (tabId: number, frameId: number, msg: BgToCs) => {
+    const frame = framesOf(tabId).get(frameId);
+    if (!frame) return;
+    try {
+      frame.port.postMessage(msg);
+    } catch {
+      framesOf(tabId).delete(frameId);
+    }
+  };
+
+  const broadcastToTab = (tabId: number, msg: BgToCs) => {
+    for (const frameId of framesOf(tabId).keys()) sendToFrame(tabId, frameId, msg);
+  };
+
+  /** Point a panel at a tab: its URL, then every frame's detection so a
+   *  late-opening panel sees the current state. */
+  const showTab = (port: Port, tabId: number) => {
+    sendToPanel(port, { t: 'bg/tabChanged', tabId, url: framesOf(tabId).get(0)?.ready?.url ?? '' });
+    for (const [frameId, frame] of framesOf(tabId)) {
+      if (frame.ready) {
+        sendToPanel(port, { t: 'bg/frameEvent', tabId, frameId, event: { t: 'cs/ready', ...frame.ready } });
+      }
+    }
+  };
 
   // Right-click → "fix this field's mapping" → panel focuses the row.
   void browser.contextMenus
@@ -61,236 +95,122 @@ export default defineBackground(() => {
     sendToFrame(tab.id, info.frameId ?? 0, { t: 'bg/identifyContext' });
   });
 
-  /** Confirmation seen: pair with the attempt, write tracker job + answers. */
-  /** Drop attempts past their TTL so a stale one can never pair with a later
-   *  confirmation — tab ids are reused, and the map is otherwise unbounded. */
-  const pruneAttempts = () => {
-    const cutoff = Date.now() - ATTEMPT_TTL_MS;
-    for (const [tabId, attempt] of pendingAttempts) {
-      if (attempt.at < cutoff) pendingAttempts.delete(tabId);
-    }
-  };
+  const acceptContentScript = (port: Port) => {
+    const tabId = port.sender?.tab?.id;
+    const frameId = port.sender?.frameId ?? 0;
+    if (tabId === undefined) return;
+    const tabFrames = frames.get(tabId) ?? new Map<number, Frame>();
+    frames.set(tabId, tabFrames);
+    const frame: Frame = { port, ready: null };
+    tabFrames.set(frameId, frame);
+    // The replacement document may connect before the old port's delayed
+    // disconnect event arrives. Only the slot's current owner may act on it.
+    const owns = () => tabFrames.get(frameId) === frame;
 
-  const recordApplication = async (
-    tabId: number,
-    detected: { url: string; title: string },
-  ): Promise<void> => {
-    const attempt = pendingAttempts.get(tabId);
-    const fresh = attempt && Date.now() - attempt.at < ATTEMPT_TTL_MS ? attempt : null;
-    pendingAttempts.delete(tabId);
-
-    const sourceUrl = fresh?.url ?? detected.url;
-    const company = companyFromUrl(sourceUrl);
-    const title = cleanJobTitle(fresh?.title || detected.title);
-
-    let resumeName: string | undefined;
-    try {
-      const profile = await loadProfile();
-      if (profile.documents.defaultResumeId) {
-        const db = await getDb();
-        resumeName = (await db.get('blobs', profile.documents.defaultResumeId))?.name;
+    port.onMessage.addListener((raw) => {
+      if (!owns()) return;
+      const msg = raw as CsToBg;
+      if (msg.t === 'cs/ready') {
+        frame.ready = { atsId: msg.atsId, url: msg.url };
+      } else if (msg.t === 'cs/submitAttempt') {
+        submissions.attempted(tabId, { url: msg.url, title: msg.title, answers: msg.answers });
+      } else if (msg.t === 'cs/submitDetected') {
+        void submissions.confirmed(tabId, { url: msg.url, title: msg.title });
       }
-    } catch {
-      // Resume attribution is best-effort.
-    }
-
-    const job = await createJob({ company, title, url: sourceUrl, resumeName }).catch(() => null);
-    if (!job) return; // duplicate within 24h, or storage failure
-
-    for (const answer of fresh?.answers ?? []) {
-      await saveAnswer({
-        questionRaw: answer.label,
-        answer: answer.value,
-        jobId: job.id,
-        company: job.company,
-        reusable: true, // hand-typed by the user — safe to resurface (review-gated)
-      }).catch(() => undefined);
-    }
-  };
-
-  const sendToPanel = (port: Port, msg: BgToPanel) => {
-    try {
-      port.postMessage(msg);
-    } catch {
-      panelPorts.delete(port);
-    }
-  };
-
-  const sendToFrame = (tabId: number, frameId: number, msg: BgToCs) => {
-    const port = csPorts.get(frameKey(tabId, frameId));
-    if (!port) return false;
-    try {
-      port.postMessage(msg);
-      return true;
-    } catch {
-      csPorts.delete(frameKey(tabId, frameId));
-      return false;
-    }
-  };
-
-  const broadcastToTabFrames = (tabId: number, msg: BgToCs) => {
-    for (const [key, port] of csPorts) {
-      const keyTabId = Number(key.split(':')[0]);
-      if (keyTabId !== tabId) continue;
-      try {
-        port.postMessage(msg);
-      } catch {
-        csPorts.delete(key);
+      for (const panel of panelsOn(tabId)) {
+        sendToPanel(panel, { t: 'bg/frameEvent', tabId, frameId, event: msg });
       }
-    }
+    });
+
+    port.onDisconnect.addListener(() => {
+      if (!owns()) return;
+      tabFrames.delete(frameId);
+      if (tabFrames.size === 0) frames.delete(tabId);
+      for (const panel of panelsOn(tabId)) sendToPanel(panel, { t: 'bg/frameGone', tabId, frameId });
+    });
   };
 
-  const relayToPanels = (tabId: number, frameId: number, event: CsToBg) => {
-    for (const [port, attached] of panelPorts) {
-      if (attached.tabId === tabId) {
-        sendToPanel(port, { t: 'bg/frameEvent', tabId, frameId, event });
+  const acceptPanel = (port: Port) => {
+    panels.set(port, { tabId: null, windowId: null });
+
+    port.onMessage.addListener(async (raw) => {
+      const msg = raw as PanelToBg;
+      switch (msg.t) {
+        case 'panel/attach': {
+          const windowId = msg.windowId ?? null;
+          let tabId = msg.tabId;
+          if (tabId === null) {
+            // A service worker has no "current window"; ask for the panel's
+            // own window when it told us, else the last focused one.
+            const [active] = await browser.tabs.query(
+              windowId !== null ? { active: true, windowId } : { active: true, lastFocusedWindow: true },
+            );
+            tabId = active?.id ?? null;
+          }
+          panels.set(port, { tabId, windowId });
+          if (tabId !== null) showTab(port, tabId);
+          break;
+        }
+        case 'panel/scan':
+          broadcastToTab(msg.tabId, { t: 'bg/scan' });
+          break;
+        case 'panel/extractJd':
+          broadcastToTab(msg.tabId, { t: 'bg/extractJd' });
+          break;
+        case 'panel/execute':
+          sendToFrame(msg.tabId, msg.frameId, { t: 'bg/execute', instructions: msg.instructions, files: msg.files });
+          break;
+        case 'panel/highlight':
+          sendToFrame(msg.tabId, msg.frameId, { t: 'bg/highlight', fieldId: msg.fieldId });
+          break;
+        case 'panel/registerSite':
+          await registerSite(msg.origin, msg.tabId);
+          break;
       }
-    }
+    });
+
+    port.onDisconnect.addListener(() => {
+      panels.delete(port);
+    });
   };
 
-  /** Replay known frame states so a late-opening panel sees current detection. */
-  const replayFramesToPanel = (port: Port, tabId: number) => {
-    for (const [key, meta] of frameMeta) {
-      const [keyTab, keyFrame] = key.split(':');
-      if (Number(keyTab) !== tabId) continue;
-      sendToPanel(port, {
-        t: 'bg/frameEvent',
-        tabId,
-        frameId: Number(keyFrame),
-        event: { t: 'cs/ready', atsId: meta.atsId, url: meta.url },
-      });
+  /** Persist content-script injection for an origin the user enabled, then reload. */
+  const registerSite = async (origin: string, tabId: number) => {
+    const registrationId = `jobpilot-site-${new URL(origin).host}`;
+    try {
+      const existing = await browser.scripting.getRegisteredContentScripts({ ids: [registrationId] });
+      if (existing.length === 0) {
+        await browser.scripting.registerContentScripts([
+          {
+            id: registrationId,
+            js: ['content-scripts/ats.js'],
+            matches: [`${origin}/*`],
+            allFrames: true,
+            runAt: 'document_idle',
+            persistAcrossSessions: true,
+          },
+        ]);
+      }
+      await browser.tabs.reload(tabId);
+    } catch (err) {
+      console.error('[jobpilot] registerSite failed', err);
     }
   };
 
   browser.runtime.onConnect.addListener((port) => {
-    if (port.name === CS_PORT) {
-      const tabId = port.sender?.tab?.id;
-      const frameId = port.sender?.frameId ?? 0;
-      if (tabId === undefined) return;
-      const key = frameKey(tabId, frameId);
-      csPorts.set(key, port);
-
-      port.onMessage.addListener((raw) => {
-        if (csPorts.get(key) !== port) return;
-        const msg = raw as CsToBg;
-        if (msg.t === 'cs/ready') {
-          frameMeta.set(key, { atsId: msg.atsId, url: msg.url });
-        } else if (msg.t === 'cs/submitAttempt') {
-          pruneAttempts();
-          pendingAttempts.set(tabId, {
-            url: msg.url,
-            title: msg.title,
-            answers: msg.answers,
-            at: Date.now(),
-          });
-        } else if (msg.t === 'cs/submitDetected') {
-          void recordApplication(tabId, { url: msg.url, title: msg.title });
-        }
-        relayToPanels(tabId, frameId, msg);
-      });
-
-      port.onDisconnect.addListener(() => {
-        // The replacement document may have connected before the old port's
-        // delayed disconnect event arrives. Only its owner may delete a slot.
-        if (csPorts.get(key) !== port) return;
-        csPorts.delete(key);
-        frameMeta.delete(key);
-        for (const [panelPort, attached] of panelPorts) {
-          if (attached.tabId === tabId) {
-            sendToPanel(panelPort, { t: 'bg/frameGone', tabId, frameId });
-          }
-        }
-      });
-      return;
-    }
-
-    if (port.name === PANEL_PORT) {
-      panelPorts.set(port, { tabId: null, windowId: null });
-
-      port.onMessage.addListener(async (raw) => {
-        const msg = raw as PanelToBg;
-        switch (msg.t) {
-          case 'panel/attach': {
-            const windowId = msg.windowId ?? null;
-            let tabId = msg.tabId;
-            if (tabId === null) {
-              // A service worker has no "current window"; ask for the panel's
-              // own window when it told us, else the last focused one.
-              const [active] = await browser.tabs.query(
-                windowId !== null ? { active: true, windowId } : { active: true, lastFocusedWindow: true },
-              );
-              tabId = active?.id ?? null;
-            }
-            panelPorts.set(port, { tabId, windowId });
-            if (tabId !== null) {
-              sendToPanel(port, { t: 'bg/tabChanged', tabId, url: frameMeta.get(frameKey(tabId, 0))?.url ?? '' });
-              replayFramesToPanel(port, tabId);
-            }
-            break;
-          }
-          case 'panel/scan':
-            broadcastToTabFrames(msg.tabId, { t: 'bg/scan' });
-            break;
-          case 'panel/extractJd':
-            broadcastToTabFrames(msg.tabId, { t: 'bg/extractJd' });
-            break;
-          case 'panel/execute':
-            sendToFrame(msg.tabId, msg.frameId, {
-              t: 'bg/execute',
-              instructions: msg.instructions,
-              files: msg.files,
-            });
-            break;
-          case 'panel/highlight':
-            sendToFrame(msg.tabId, msg.frameId, { t: 'bg/highlight', fieldId: msg.fieldId });
-            break;
-          case 'panel/registerSite': {
-            const registrationId = `jobpilot-site-${new URL(msg.origin).host}`;
-            try {
-              const existing = await browser.scripting.getRegisteredContentScripts({
-                ids: [registrationId],
-              });
-              if (existing.length === 0) {
-                await browser.scripting.registerContentScripts([
-                  {
-                    id: registrationId,
-                    js: ['content-scripts/ats.js'],
-                    matches: [`${msg.origin}/*`],
-                    allFrames: true,
-                    runAt: 'document_idle',
-                    persistAcrossSessions: true,
-                  },
-                ]);
-              }
-              await browser.tabs.reload(msg.tabId);
-            } catch (err) {
-              console.error('[jobpilot] registerSite failed', err);
-            }
-            break;
-          }
-        }
-      });
-
-      port.onDisconnect.addListener(() => {
-        panelPorts.delete(port);
-      });
-      return;
-    }
+    if (port.name === CS_PORT) acceptContentScript(port);
+    else if (port.name === PANEL_PORT) acceptPanel(port);
   });
 
   // A closed tab can never produce the confirmation its attempt was waiting for.
-  browser.tabs.onRemoved.addListener((tabId) => {
-    pendingAttempts.delete(tabId);
-  });
+  browser.tabs.onRemoved.addListener((tabId) => submissions.forget(tabId));
 
   // Navigation to an unenabled site never sends cs/ready. Clear the previous
   // application's state as soon as navigation starts, including reloads.
   browser.tabs.onUpdated.addListener((tabId, change) => {
     if (change.status !== 'loading' && !change.url) return;
-    for (const [port, attached] of panelPorts) {
-      if (attached.tabId === tabId) {
-        sendToPanel(port, { t: 'bg/tabChanged', tabId, url: change.url ?? '', reset: true });
-      }
+    for (const panel of panelsOn(tabId)) {
+      sendToPanel(panel, { t: 'bg/tabChanged', tabId, url: change.url ?? '', reset: true });
     }
   });
 
@@ -298,11 +218,10 @@ export default defineBackground(() => {
   // in the panel's own window. Side panels are per-window, so a tab switch in
   // a second window must not repoint the first window's panel.
   browser.tabs.onActivated.addListener(({ tabId, windowId }) => {
-    for (const [port, attached] of panelPorts) {
+    for (const [port, attached] of panels) {
       if (attached.windowId !== null && attached.windowId !== windowId) continue;
-      panelPorts.set(port, { ...attached, tabId });
-      sendToPanel(port, { t: 'bg/tabChanged', tabId, url: frameMeta.get(frameKey(tabId, 0))?.url ?? '' });
-      replayFramesToPanel(port, tabId);
+      panels.set(port, { ...attached, tabId });
+      showTab(port, tabId);
     }
   });
 });
