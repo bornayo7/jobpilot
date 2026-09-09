@@ -334,7 +334,7 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Pi
           </button>
 
           {review?.kind === 'rejected' && (
-            <div className="warn-box" style={{ marginTop: 8 }}>
+            <div className="warn-box" role="alert" style={{ marginTop: 8 }}>
               <div>
                 <strong>Import rejected:</strong>
                 <ul className="problem-list">

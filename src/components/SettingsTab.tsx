@@ -50,7 +50,7 @@ export function SettingsTab() {
     try {
       const saved = await patchSettings(changedSettings(base.settings, settings), base);
       setSettings(saved.settings); setBase(saved); setDirty(false);
-    } catch (err) { setError(`Settings were not saved. Your draft is preserved. ${String(err)}`); }
+    } catch (err) { setError(`Settings were not saved. Your draft is preserved. ${err instanceof Error ? err.message : String(err)}`); }
     finally { setSaving(false); }
   };
 
@@ -214,7 +214,7 @@ export function SettingsTab() {
             <div key={value} className="health-row">
               <button onClick={() => checkHealth(value)}>Check {label}</button>
               {health[value] && (
-                <span className={health[value].ok ? 'chip ok' : 'chip fail'}>
+                <span role={health[value].ok ? 'status' : 'alert'} className={health[value].ok ? 'chip ok' : 'chip fail'}>
                   {health[value].ok ? 'OK' : health[value].hint ?? 'Failed'}
                 </span>
               )}
