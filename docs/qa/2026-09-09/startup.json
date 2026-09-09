@@ -1,0 +1,106 @@
+{
+  "method": "Five cold empty extension profiles per artifact; time from panel navigation to visible Fill navigation; observed requested JavaScript file bytes, uncompressed. Local Windows Chromium 153.0.8010.12; not a universal benchmark.",
+  "beforeSource": "6df0f8f application source, verified identical in installation-verification worktree",
+  "afterSource": "24fb97e",
+  "before": {
+    "checkedAt": "2026-09-09T22:27:15.05Z",
+    "channel": "chromium",
+    "totalBytes": 4212645,
+    "medianReadyMs": 183,
+    "runs": [
+      {
+        "readyMs": 199,
+        "jsBytes": 1896289,
+        "scripts": [
+          "/chunks/sidepanel-_DwxbJGu.js",
+          "/chunks/style--YmVKh1O.js"
+        ]
+      },
+      {
+        "readyMs": 183,
+        "jsBytes": 1896289,
+        "scripts": [
+          "/chunks/sidepanel-_DwxbJGu.js",
+          "/chunks/style--YmVKh1O.js"
+        ]
+      },
+      {
+        "readyMs": 180,
+        "jsBytes": 1896289,
+        "scripts": [
+          "/chunks/sidepanel-_DwxbJGu.js",
+          "/chunks/style--YmVKh1O.js"
+        ]
+      },
+      {
+        "readyMs": 178,
+        "jsBytes": 1896289,
+        "scripts": [
+          "/chunks/sidepanel-_DwxbJGu.js",
+          "/chunks/style--YmVKh1O.js"
+        ]
+      },
+      {
+        "readyMs": 185,
+        "jsBytes": 1896289,
+        "scripts": [
+          "/chunks/sidepanel-_DwxbJGu.js",
+          "/chunks/style--YmVKh1O.js"
+        ]
+      }
+    ]
+  },
+  "after": {
+    "checkedAt": "2026-09-09T22:34:43.01Z",
+    "channel": "chromium",
+    "totalBytes": 3934586,
+    "medianReadyMs": 106,
+    "runs": [
+      {
+        "readyMs": 94,
+        "jsBytes": 370383,
+        "scripts": [
+          "/chunks/rolldown-runtime-Dd_uD5pT.js",
+          "/chunks/sidepanel-DLZQR1LR.js",
+          "/chunks/style-BRDAZmhZ.js"
+        ]
+      },
+      {
+        "readyMs": 97,
+        "jsBytes": 370383,
+        "scripts": [
+          "/chunks/rolldown-runtime-Dd_uD5pT.js",
+          "/chunks/sidepanel-DLZQR1LR.js",
+          "/chunks/style-BRDAZmhZ.js"
+        ]
+      },
+      {
+        "readyMs": 106,
+        "jsBytes": 370383,
+        "scripts": [
+          "/chunks/rolldown-runtime-Dd_uD5pT.js",
+          "/chunks/sidepanel-DLZQR1LR.js",
+          "/chunks/style-BRDAZmhZ.js"
+        ]
+      },
+      {
+        "readyMs": 111,
+        "jsBytes": 370383,
+        "scripts": [
+          "/chunks/rolldown-runtime-Dd_uD5pT.js",
+          "/chunks/sidepanel-DLZQR1LR.js",
+          "/chunks/style-BRDAZmhZ.js"
+        ]
+      },
+      {
+        "readyMs": 119,
+        "jsBytes": 370383,
+        "scripts": [
+          "/chunks/rolldown-runtime-Dd_uD5pT.js",
+          "/chunks/sidepanel-DLZQR1LR.js",
+          "/chunks/style-BRDAZmhZ.js"
+        ]
+      }
+    ]
+  }
+}

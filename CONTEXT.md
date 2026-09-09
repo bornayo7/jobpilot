@@ -2,8 +2,6 @@
 
 JobPilot supports a person's job applications with reviewed form filling, tailored documents and application memory.
 
-This is the intended domain vocabulary for the proposed overhaul, not a claim that every invariant is implemented. Current gaps, including automatically reusable captured answers, are recorded in `docs/CODEBASE_REVIEW.md`.
-
 ## Language
 
 **Profile**: A named collection of the applicant's facts, experience, preferences and document choices. Multiple profiles can belong to the same person.
@@ -35,6 +33,9 @@ _Avoid_: Application version
 
 **Captured answer**: Text retained from the applicant's form at a submit attempt. Capture says where the text came from, not whether it is suitable for another employer.
 _Avoid_: Reusable answer
+
+**Application-only answer**: An answer available as a suggestion for its originating application. Reusing it for another application requires a separate choice.
+_Avoid_: Reusable answer, private answer
 
 **Reusable answer**: An answer explicitly allowed to appear as a suggestion for other applications. Reusability is separate from whether text was typed or generated.
 _Avoid_: Automatically safe answer

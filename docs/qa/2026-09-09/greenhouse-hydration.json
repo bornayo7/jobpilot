@@ -1,0 +1,296 @@
+{
+  "at": "2026-09-09T22:29:27.043Z",
+  "submitted": false,
+  "rounds": [
+    {
+      "phase": "initial",
+      "started": 1788992969676,
+      "candidate": {
+        "field": {
+          "fieldId": "jp-mtuo81wy-0",
+          "control": "text",
+          "label": "First Name",
+          "id": "first_name",
+          "ariaLabel": "First Name",
+          "autocomplete": "given-name",
+          "required": true,
+          "signature": "99690e2fa51d84b8"
+        },
+        "frameId": 0,
+        "documentId": "62ba9a96-d783-4ca1-ba6a-8113873841b0"
+      },
+      "before": {
+        "id": "first_name",
+        "name": "",
+        "value": "",
+        "ownValueDescriptor": false,
+        "reactProperties": []
+      },
+      "result": [
+        {
+          "fieldId": "jp-mtuo81wy-0",
+          "ok": false,
+          "verifiedValue": "JobPilot Test",
+          "error": "Page did not retain the value"
+        }
+      ],
+      "readback": {
+        "changes": [
+          {
+            "at": 1788992969718,
+            "originalConnected": true,
+            "originalValue": "",
+            "currentValue": "",
+            "same": true,
+            "disabled": false,
+            "readonly": false,
+            "fieldId": "jp-mtuo81wy-0"
+          }
+        ],
+        "events": [
+          {
+            "at": 1788992969679,
+            "type": "input",
+            "trusted": false,
+            "value": "JobPilot Test",
+            "connected": true,
+            "id": "first_name",
+            "name": ""
+          },
+          {
+            "at": 1788992969680,
+            "type": "change",
+            "trusted": false,
+            "value": "JobPilot Test",
+            "connected": true,
+            "id": "first_name",
+            "name": ""
+          },
+          {
+            "at": 1788992969680,
+            "type": "blur",
+            "trusted": false,
+            "value": "JobPilot Test",
+            "connected": true,
+            "id": "first_name",
+            "name": ""
+          },
+          {
+            "at": 1788992969680,
+            "type": "focusout",
+            "trusted": false,
+            "value": "JobPilot Test",
+            "connected": true,
+            "id": "first_name",
+            "name": ""
+          }
+        ],
+        "value": ""
+      },
+      "cleared": [
+        {
+          "fieldId": "jp-mtuo81wy-0",
+          "ok": true,
+          "verifiedValue": ""
+        }
+      ]
+    },
+    {
+      "phase": "stableRetry",
+      "started": 1788992975518,
+      "candidate": {
+        "field": {
+          "fieldId": "jp-mtuo81wy-0",
+          "control": "text",
+          "label": "First Name",
+          "id": "first_name",
+          "ariaLabel": "First Name",
+          "autocomplete": "given-name",
+          "required": true,
+          "signature": "99690e2fa51d84b8"
+        },
+        "frameId": 0,
+        "documentId": "62ba9a96-d783-4ca1-ba6a-8113873841b0"
+      },
+      "before": {
+        "id": "first_name",
+        "name": "",
+        "value": "",
+        "ownValueDescriptor": true,
+        "reactProperties": [
+          "__reactFiber$dtv6kgy07w",
+          "__reactProps$dtv6kgy07w",
+          "__reactEvents$dtv6kgy07w"
+        ]
+      },
+      "result": [
+        {
+          "fieldId": "jp-mtuo81wy-0",
+          "ok": true,
+          "verifiedValue": "JobPilot Test"
+        }
+      ],
+      "readback": {
+        "changes": [
+          {
+            "at": 1788992975540,
+            "originalConnected": true,
+            "originalValue": "JobPilot Test",
+            "currentValue": "JobPilot Test",
+            "same": true,
+            "disabled": false,
+            "readonly": false,
+            "fieldId": "jp-mtuo81wy-0"
+          }
+        ],
+        "events": [
+          {
+            "at": 1788992971865,
+            "type": "input",
+            "trusted": false,
+            "value": "",
+            "connected": true,
+            "id": "first_name",
+            "name": ""
+          },
+          {
+            "at": 1788992971865,
+            "type": "change",
+            "trusted": false,
+            "value": "",
+            "connected": true,
+            "id": "first_name",
+            "name": ""
+          },
+          {
+            "at": 1788992971865,
+            "type": "blur",
+            "trusted": false,
+            "value": "",
+            "connected": true,
+            "id": "first_name",
+            "name": ""
+          },
+          {
+            "at": 1788992971865,
+            "type": "focusout",
+            "trusted": false,
+            "value": "",
+            "connected": true,
+            "id": "first_name",
+            "name": ""
+          },
+          {
+            "at": 1788992975525,
+            "type": "input",
+            "trusted": false,
+            "value": "JobPilot Test",
+            "connected": true,
+            "id": "first_name",
+            "name": ""
+          },
+          {
+            "at": 1788992975529,
+            "type": "change",
+            "trusted": false,
+            "value": "JobPilot Test",
+            "connected": true,
+            "id": "first_name",
+            "name": ""
+          },
+          {
+            "at": 1788992975529,
+            "type": "blur",
+            "trusted": false,
+            "value": "JobPilot Test",
+            "connected": true,
+            "id": "first_name",
+            "name": ""
+          },
+          {
+            "at": 1788992975529,
+            "type": "focusout",
+            "trusted": false,
+            "value": "JobPilot Test",
+            "connected": true,
+            "id": "first_name",
+            "name": ""
+          }
+        ],
+        "value": "JobPilot Test"
+      },
+      "cleared": [
+        {
+          "fieldId": "jp-mtuo81wy-0",
+          "ok": true,
+          "verifiedValue": ""
+        }
+      ]
+    }
+  ],
+  "status": 200,
+  "trustedManual": {
+    "value": "JobPilot Test",
+    "events": [
+      {
+        "at": 1788992977649,
+        "type": "input",
+        "trusted": false,
+        "value": "",
+        "connected": true,
+        "id": "first_name",
+        "name": ""
+      },
+      {
+        "at": 1788992977652,
+        "type": "change",
+        "trusted": false,
+        "value": "",
+        "connected": true,
+        "id": "first_name",
+        "name": ""
+      },
+      {
+        "at": 1788992977652,
+        "type": "blur",
+        "trusted": false,
+        "value": "",
+        "connected": true,
+        "id": "first_name",
+        "name": ""
+      },
+      {
+        "at": 1788992977652,
+        "type": "focusout",
+        "trusted": false,
+        "value": "",
+        "connected": true,
+        "id": "first_name",
+        "name": ""
+      },
+      {
+        "at": 1788992978536,
+        "type": "input",
+        "trusted": true,
+        "value": "JobPilot Test",
+        "connected": true,
+        "id": "first_name",
+        "name": ""
+      }
+    ]
+  },
+  "finalValue": "",
+  "workerEvents": [
+    {
+      "at": 1788992969664,
+      "t": "cs/ready",
+      "documentId": "62ba9a96-d783-4ca1-ba6a-8113873841b0"
+    },
+    {
+      "at": 1788992969996,
+      "t": "cs/ready",
+      "documentId": "685c5d60-b53f-4894-a42e-b359599085f4"
+    }
+  ],
+  "finalUrl": "https://job-boards.greenhouse.io/system/jobs/6014153004"
+}

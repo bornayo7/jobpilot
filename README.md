@@ -1,197 +1,91 @@
 # JobPilot
 
-A browser extension that fills in job applications from a profile you control, and helps you tailor a resume and cover letter to the posting you're currently looking at.
+JobPilot is a personal Chromium extension for reviewing and filling job applications, tailoring documents through your own chat subscription, and keeping application history. You review the proposed values and submit the application yourself.
 
-It is a personal tool, built for one person's job hunt. It is not on any extension store — you build it and load it unpacked.
+The Thermo overhaul addresses all seventeen review findings. The [release evidence](docs/REVIEW_RESOLUTION.md) records 341 unit tests, 13 browser workflows, Windows/Linux CI, public form checks, and concrete qualification limits.
 
----
+## Install
 
-## What problem it solves
-
-Applying to jobs is the same twenty minutes over and over: retype your name, address, and work history into a slightly different form; re-answer "why do you want to work here?"; re-tailor a resume to a posting you'll read once.
-
-JobPilot removes the repetition without removing you from the loop:
-
-- **It fills the form, you submit it.** Nothing is ever auto-submitted. Every value lands in a review table first, and the ones that matter are flagged for you to read before anything is written to the page.
-- **It writes nothing on its own.** Long-form text — resumes, cover letters, screening answers — is produced by *your* chat subscription, not by an API key burning your money in the background. See [The Prompt Studio](#the-prompt-studio) below.
-- **It remembers.** Answer a screening question once and it's in a bank you can reuse, on your terms.
-
----
-
-## What it does
-
-**Autofill.** Detects the ATS you're on, discovers supported controls (including inside open shadow roots and permitted cross-origin iframes), works out what each field wants, and fills it from your profile. Reads values back immediately to check each write; a site's later asynchronous changes still need visual review.
-
-**Prompt Studio.** Scans the job posting, then builds a complete, self-contained prompt for a tailored resume, a cover letter, a specific screening answer, or a follow-up email. You paste it into claude.ai or ChatGPT, paste the reply back, and JobPilot validates and renders it.
-
-**ATS-safe document rendering.** Approved resumes render to PDF *and* DOCX from the same JSON. Single column, standard PDF fonts, contact details in the body, no soft hyphens. PDF validation extracts the text layer with pdf.js and checks name/email, employers, work bullets, schools, sampled skills, and basic reading order. This is a structural check, not a guarantee that every ATS will parse every section correctly.
-
-**Answers bank.** Free-text answers are snapshotted the moment you click Submit, before navigation destroys the form. Similar questions on later applications surface them as ranked suggestions — never as autofill.
-
-**Application tracker.** An entry is created when a confirmation page actually appears, not when you click Submit. (Trusting the click is the most common way trackers end up full of applications that never went through.) Groups by status, flags follow-ups that are due, and warns you when you're about to apply somewhere you already applied.
-
-**Dealbreaker warnings.** Scans the posting locally — plain regex, no model — for the things you told it you care about: no visa sponsorship, citizenship or clearance requirements, a salary ceiling below your floor, or your own custom terms. You get told before you spend twenty minutes on it.
-
-**Match gaps.** Which of your skills the posting mentions, and which recurring terms in the posting your profile lacks. Deliberately a list, not a percentage — coverage scores invite score-chasing rather than honest tailoring.
-
-**Multiple profiles.** Keep a "SWE" profile and an "ML" profile with different bullets and a different default resume. Switching changes what every tab reads, live.
-
-**Encrypted backup.** Everything — profiles, settings, answers, tracker, generated documents — into one passphrase-protected `.jpbak` file. AES-GCM, key derived with PBKDF2-SHA256 at 310,000 iterations, WebCrypto only.
-
----
-
-## Privacy model
-
-This is the part worth reading before you trust it with your data.
-
-**Everything is local.** There is no JobPilot server, no account, and no telemetry. Your profile lives in `chrome.storage.local`; documents, answers, tracker entries, and generated versions live in IndexedDB on your machine.
-
-**Your EEO answers are never sent to a model.** Gender, race, veteran status, disability status, and pronouns are filled only by deterministic tiers (per-site adapters and label rules), are stripped from every Prompt Studio prompt, and are always flagged for explicit review before being written to a page. This is enforced structurally: the model-classification tier is restricted to an allowlist of non-sensitive field kinds, and any answer outside that list is discarded rather than trusted.
-
-**Your API keys do cheap work only.** If you configure a key, it is used for one thing: classifying form fields the deterministic tiers couldn't identify — a single batched call per form. All the expensive writing goes through the copy-paste flow to a subscription you already pay for.
-
-**The content script is deliberately dumb.** The only code that touches a job site's DOM reports field descriptions, executes fill instructions, extracts posting text, and snapshots answers. It never sees your profile, your keys, or any model.
-
-**Site access is opt-in beyond the majors.** The extension runs automatically on the big ATS platforms. For a company's own careers site you enable it once, per origin, with an explicit permission prompt.
-
----
-
-## The Prompt Studio
-
-The unusual design decision, and the reason there's no "Generate" button that costs money.
-
-Small models are fine at classification ("is this field a phone number?"). They are not fine at writing a resume you'll be judged on. The strong models that *are* good at it are ones most people already pay a subscription for — and running that work through an API key means paying twice.
-
-So JobPilot splits the two:
-
-| Work | Where it runs | What it costs |
-|---|---|---|
-| Field classification, when rules fail | Your configured API key or a local model | Fractions of a cent per form |
-| Resumes, cover letters, screening answers, follow-up emails | Copy-paste into your own claude.ai / ChatGPT | Nothing extra |
-
-The prompt it builds includes the posting, your profile with EEO fields removed, the tailoring rules, a strict output format, and a writing-style guide. Work authorization and preferences, including salary and visa notes, remain in the prompt: review it before pasting into an external chat. Malformed replies are rejected with readable errors before storage.
-
-For resumes, the review step also shows you **which bullets the model rewrote versus kept verbatim from your profile**. Rewritten bullets are where fabrication risk lives, so they're listed for you to read before you approve.
-
----
-
-## How the autofill works
-
-Saved manual corrections take precedence over every automatic stage. Other fields pass through four stages, falling through only when the preceding stage cannot identify them.
-
-1. **Per-ATS adapter** — platform-stable keys (Greenhouse's `first_name`, Ashby's `_systemfield_email`, Workday's `data-automation-id`). Deterministic, confidence 1.0. For Greenhouse, this also prefetches the job's real question schema from the public Job Board API, so selects use the exact values the server expects.
-2. **Heuristics** — normalized-label regexes plus `autocomplete` attributes. Deterministic and free.
-3. **Mapping cache** — model classifications from previous forms. Cache keys deliberately exclude per-posting identifiers. Manual corrections are checked before the automatic stages and are preserved when old model entries are evicted.
-4. **One batched model call** for whatever is left, restricted to the non-sensitive allowlist, and cached for next time.
-
-Values are then materialized from your profile, matched against the field's real options where they exist (a radio group counts as one field whose options are its buttons), and presented for review. Fuzzy option matches, sensitive fields, screening questions, and anything below the confidence threshold are excluded from the bulk fill until you look at them.
-
----
-
-## Supported sites
-
-| Site | Support |
-|---|---|
-| Greenhouse | Adapter + Job Board API schema prefetch |
-| Lever | Adapter |
-| Ashby | Adapter |
-| Workday, iCIMS, SmartRecruiters | Detected; heuristics only (adapters not written yet) |
-| LinkedIn, Indeed | Detected; heuristics only, by design — unstable DOMs and ToS-sensitive |
-| Any company careers site | Enable per-origin from the Fill tab |
-
----
-
-## Install and run
-
-Requires **Node 22 or newer** (a WXT requirement).
+Use Node.js 24 and npm, matching CI. From a checkout:
 
 ```bash
-npm install
-```
-
-Development, with hot reload and a browser launched for you:
-
-```bash
-npm run dev
-```
-
-Production build — output lands in `.output/chrome-mv3/`:
-
-```bash
+npm ci
 npm run build
+npm run check:manifest
 ```
 
-To load a production build by hand: open `chrome://extensions`, turn on Developer mode, choose **Load unpacked**, and select `.output/chrome-mv3`.
+Open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select `.output/chrome-mv3`. Click the JobPilot toolbar icon, or use **Alt+J**, to open its side panel. Reload the extension after rebuilding; reload an already open application page to load the new content script.
 
-Edge is supported via `npm run dev:edge`. `npm run zip` packages a build for distribution.
+For development, `npm run dev` starts WXT. `npm run dev:edge` selects Edge; that command is available independently of the browser qualification recorded for a release. `npm run zip` packages a build. The project is loaded unpacked rather than installed from an extension store.
 
-### First run
+## Set up a profile
 
-1. Click the toolbar icon (or press **Alt+J**) to open the side panel.
-2. Open the **Settings** tab → **Open profile editor**, or right-click the icon → Options.
-3. Fastest way to fill the profile: the **Import from your existing resume** card. Copy the prompt, paste it into claude.ai with your resume text under it, paste the JSON reply back.
-4. Upload your resume in **Documents** and mark one as the default — that's what gets attached to file fields.
-5. Optionally add an API key in Settings. Without one, JobPilot still runs on adapters, heuristics, and the cache; you just lose the fallback classifier.
+1. Open **Settings → Open profile editor**.
+2. Enter your facts, or use **Import from your existing resume** to build a prompt and review the returned profile data.
+3. Upload a resume in **Documents** and choose its default, then **Save profile**.
+4. Optionally configure a field-mapping provider in Settings. Rules and saved mappings still work without a provider key. **Send test prompt** makes a real request to the selected mapping provider.
 
----
+Each profile has its own open editor draft. Switching or renaming a profile keeps that draft. Saving checks the original profile and its revision; a competing edit produces a conflict with **Export draft** and **Use saved profile** actions. Profile drafts are unsaved until you press Save: save or export before closing the editor. The editor warns before leaving with dirty drafts.
 
-## Project layout
+## Use it on an application
 
-```
-entrypoints/
-  ats.content.ts        Content script — the only code that touches job-site DOMs
-  background.ts         Service worker; pure event router between panel and frames
-  sidepanel/            The main UI (Fill · Generate · Tracker · Answers · Settings)
-  options/              Profile editor, document store, import, backup
-src/
-  components/           Side-panel tabs, the fill review table, the version library
-    profile/            Options-page profile editor, one card per section
-  hooks/                Background port; fill-plan resolution; live profile and settings
-src/lib/
-  fill/                 Discovery, the resolver tiers, executor, DOM helpers
-    adapters/           ATS identity, per-ATS classification, API prefetch
-  generation/           PDF and DOCX rendering, paste-back import, ATS validation, version filing
-  prompts/promptStudio/ Prompt builders and the writing-style guide
-  providers/            Anthropic, OpenAI-compatible, Ollama, LM Studio, SSE parsing
-  memory/               Answers bank, dealbreakers, match gaps
-  tracker/              Confirmation detection, submit/confirmation pairing, the application store
-  storage/              chrome.storage and IndexedDB layers, stored record types, backup gather/restore
-  schema/               Zod schemas, field-kind vocabulary and profile getters, migrations
-  util/                 Backup encryption, base64, downloads, fuzzy matching
-tests/unit/             Vitest suite
-```
+**Fill** discovers supported controls, including open shadow roots and permitted frames. Saved manual mappings take precedence, followed by Greenhouse/Lever/Ashby adapters, label rules, cached classifications, and an optional model fallback. Greenhouse can also fetch its public question schema.
 
----
+Review the values and inclusion controls. Sensitive answers, ambiguous questions, and fuzzy matches require attention. Authorization and sponsorship interpretation supports limited wording for the stored US work facts; unsupported wording remains manual. **Fill reviewed fields** stays busy until the run finishes or fails. Navigation, document replacement, lost connections, and timeouts invalidate obsolete runs. Readback checks observe committed values over a bounded interval; inspect the final form because a site can still change it later.
 
-## Development
+**Generate** scans the posting, builds a prompt for a resume, cover letter, or screening answer, and accepts your pasted reply. Copy the prompt into your chosen external chat, then validate and review its response. Resume review shows changed bullets and a PDF preview before approval. An approved resume saves its PDF, DOCX, and version record together. Cover letters save as PDF. Generation drafts persist by application URL and profile; watch their save status before closing the panel. A result from an older context cannot clear newer pasted work.
+
+**Tracker** records a submission only when specific confirmation evidence matches a recent attempt for the same application. Attempts expire after 20 minutes. Unsupported confirmation flows can require a manual tracker entry; a tracker record is not an employer-issued receipt. Distinct requisitions and repeated attempts keep their own identity.
+
+**Answers** keeps captured and generated answers scoped to their application until you explicitly permit reuse. Older rows with an unconfirmed reuse flag also require review before cross-application suggestions resume. Suggestions are ranked and require selection; they are not automatically filled or submitted.
+
+Dealbreaker warnings and skill-gap comparisons run locally against the posting. They are prompts for review, not an assessment of eligibility or a promise of selection.
+
+## Site coverage
+
+| Site | Implemented handling |
+|---|---|
+| Greenhouse | Adapter and public question-schema prefetch |
+| Lever, Ashby | Dedicated adapters |
+| Workday, iCIMS, SmartRecruiters | Detection and generic rules; no dedicated adapters |
+| LinkedIn, Indeed | Detection and generic rules |
+| Other company careers sites | **Enable on this site** requests access for that origin and reloads the page after registration succeeds |
+
+Detection is not proof that every portal widget works. Multi-step wizards are not advanced automatically; repeated sections and split month/year widgets have no complete specialized flow. Closed shadow roots and inaccessible frames cannot be inspected. Chrome's built-in Prompt API is not an available configured provider. Live-site and browser qualification must be read from release evidence, separately from local fixtures.
+
+## Documents and backups
+
+The document list uses metadata rather than reading every file's bytes. Uploaded documents and generated versions have distinct ownership. Remove generated files through the version library so their formats are deleted together. If any profile uses a file as a default, deletion requires explicit clearing of those defaults. Historical tracker references remain as history after the associated version is removed.
+
+In the profile editor's **Backup & restore** card:
+
+1. Enter a passphrase of at least eight characters and choose **Export encrypted backup**.
+2. To restore, enter the backup's passphrase and choose **Inspect backup…**.
+3. Review validation results and missing-reference warnings, then choose **Replace data with this backup** to replace saved data.
+
+A `.jpbak` includes profiles, settings **including API keys**, uploaded/generated files, versions, answers, tracker records, mappings, unmatched-field history, and saved generation drafts. It excludes unsaved profile/settings edits, browser site permissions, transient submission attempts, and internal recovery metadata. Keep the passphrase separately: it is not saved and cannot be recovered by JobPilot. Encryption uses AES-256-GCM with a PBKDF2-SHA256 key and 310,000 iterations.
+
+Restore validates compatible records before replacing data. Unsupported future profile formats are rejected; missing historical targets are preserved and reported. Export can preserve unsupported raw current profiles for recovery, and a compatible known-good backup can replace them. A recovery export is not a promise that an older extension can interpret a newer schema.
+
+Restore and default-clearing deletion coordinate Chrome storage with IndexedDB through a durable journal. Normal reads and writes recover an unfinished journal first. A completed database phase resumes its recorded commit; a persisted rollback phase restores its recovery copy. If recovery cannot finish, the UI reports it and keeps the journal. Restore storage access and retry loading before further edits; do not clear extension data to dismiss the error. This mechanism makes interruptions recoverable; it does not make the two storage systems one transaction.
+
+## Data and network access
+
+JobPilot has no application server, account, or telemetry. Saved records remain in the browser profile. Uninstalling the extension or deleting that browser profile can remove them; export backups you intend to keep.
+
+Optional provider requests send field-mapping prompts to the configured provider. Greenhouse schema prefetch contacts its public API. Prompt Studio removes the structured EEO section from the profile before building its prompt; work authorization, preferences, and user-written text can remain. Review copied prompts before sharing them with any external chat. The content runtime receives selected field values and file payloads, not the full stored profile or provider keys; filling then places those selected values on the application page.
+
+## Verify and develop
 
 ```bash
-npm test        # Vitest regression suite
-npm run compile # tsc --noEmit
-npm run build   # production build
+npm run check                  # typecheck, unit tests, production build, manifest check
+npm audit --audit-level=moderate
+npx playwright install chromium
+npm run test:browser            # uses the existing production build
 ```
 
-TypeScript runs in `strict` mode with `noUncheckedIndexedAccess`. Tests cover pure logic, document round-trips, React state transitions, DOM discovery/execution in happy-dom, and backup transactions in fake-indexeddb. Chrome integration and real postings still need browser testing. See [AUDIT.md](AUDIT.md) for the verified findings and prioritized follow-up work.
+On Linux, use `npx playwright install --with-deps chromium` when browser system dependencies are needed. CI runs clean-install checks on Windows and Linux and the Chromium fixture suite on Linux. Browser tests use isolated synthetic applications and do not submit real applications.
 
-The [September 9 full codebase review](docs/CODEBASE_REVIEW.md) records the current evidence and remaining defects. The [Thermo overhaul plan](docs/OVERHAUL_PLAN.md) gives the implementation order, acceptance checks and master integration procedure. These documents describe proposed work, not completed fixes.
+Unit tests cover storage conflicts and recovery, provider transport contracts, form discovery/execution, stale UI operations, and PDF/DOCX content. Browser fixtures exercise extension loading, profiles, filling, downloads, and storage recovery. PDF text checks include all rendered resume sections; document layout tests cover representative long content. These checks do not establish compatibility with every ATS parser, arbitrary Unicode font coverage, or all live providers.
 
----
-
-## Known limits
-
-Honest list of what isn't done:
-
-- **Current production manifest is rejected by Chrome.** LinkedIn's `/jobs/*` match shares an origin-fallback flag that requires wildcard paths. A successful WXT build does not imply installation succeeds. The proposed declaration split and browser acceptance are the first stage of the overhaul plan.
-
-- **Never verified against a live application portal.** The code has been read carefully and unit-tested; that is not the same as having submitted a real application through it. Treat the first few runs as a test, with the console open.
-- No adapters yet for Workday, iCIMS, or SmartRecruiters — they fall back to heuristics.
-- Multi-step application wizards aren't advanced automatically.
-- Split month/year date widgets aren't implemented; date inputs are typed into as text.
-- Chrome's built-in Prompt API is stubbed out, not wired up.
-- The document store is shared between uploaded resumes and generated output, so the Documents list shows both.
-
----
-
-## Status
-
-Personal project under development; live-portal operation remains unverified. There is no license file, which means default copyright applies — ask before reusing it.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for module ownership, [CONTEXT.md](CONTEXT.md) for domain terminology, the [baseline review](docs/CODEBASE_REVIEW.md), and the [approved implementation and merge plan](docs/OVERHAUL_PLAN.md). Release source is `e8920e1`, including the verified `24fb97e` overhaul and final error-announcement corrections; later documentation commits preserve that implementation.

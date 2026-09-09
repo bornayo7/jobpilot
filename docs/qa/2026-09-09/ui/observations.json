@@ -1,0 +1,155 @@
+[
+  {
+    "name": "options-loading-360",
+    "note": "Production UI; chrome.storage.local.get artificially held before startup in this disposable page.",
+    "actions": [],
+    "viewport": {
+      "width": 360,
+      "height": 850
+    },
+    "scrollWidth": 360,
+    "clientWidth": 360,
+    "overflow": [],
+    "unlabeled": []
+  },
+  {
+    "name": "settings-loading-320",
+    "note": "Production UI; chrome.storage.local.get artificially held before startup in this disposable page.",
+    "actions": [],
+    "viewport": {
+      "width": 320,
+      "height": 850
+    },
+    "scrollWidth": 320,
+    "clientWidth": 320,
+    "overflow": [],
+    "unlabeled": []
+  },
+  {
+    "name": "answers-empty-320",
+    "note": "Untouched empty answer bank in real disposable Chrome storage.",
+    "actions": [
+      "Search saved answers",
+      "New answer question",
+      "New answer text",
+      "Save answer (disabled until complete)"
+    ],
+    "viewport": {
+      "width": 320,
+      "height": 850
+    },
+    "scrollWidth": 320,
+    "clientWidth": 320,
+    "overflow": [],
+    "unlabeled": []
+  },
+  {
+    "name": "tracker-empty-320",
+    "note": "Untouched empty tracker in real disposable Chrome storage.",
+    "actions": [],
+    "viewport": {
+      "width": 320,
+      "height": 850
+    },
+    "scrollWidth": 320,
+    "clientWidth": 320,
+    "overflow": [],
+    "unlabeled": []
+  },
+  {
+    "name": "options-conflict-320",
+    "note": "Real two-page saved profile revision conflict; local draft remains and Save is disabled.",
+    "actions": [
+      "Export draft",
+      "Use saved profile"
+    ],
+    "viewport": {
+      "width": 320,
+      "height": 850
+    },
+    "scrollWidth": 320,
+    "clientWidth": 320,
+    "overflow": [],
+    "unlabeled": []
+  },
+  {
+    "name": "options-conflict-zoom-200",
+    "note": "Real Chrome tab zoom 2 at 640 device-independent viewport width.",
+    "actions": [
+      "Export draft",
+      "Use saved profile"
+    ],
+    "viewport": {
+      "width": 320,
+      "height": 500
+    },
+    "scrollWidth": 320,
+    "clientWidth": 320,
+    "overflow": [],
+    "unlabeled": []
+  },
+  {
+    "name": "settings-conflict-320",
+    "note": "Real two-page same-field salary settings conflict; the 90000 local value is retained.",
+    "actions": [
+      "Reload saved settings"
+    ],
+    "viewport": {
+      "width": 320,
+      "height": 850
+    },
+    "scrollWidth": 320,
+    "clientWidth": 320,
+    "overflow": [],
+    "unlabeled": []
+  },
+  {
+    "name": "settings-missing-key-320",
+    "note": "Real provider preflight without an API key; no external request or credential used.",
+    "actions": [
+      "Check Anthropic"
+    ],
+    "viewport": {
+      "width": 320,
+      "height": 850
+    },
+    "scrollWidth": 320,
+    "clientWidth": 320,
+    "overflow": [],
+    "unlabeled": []
+  },
+  {
+    "name": "generate-import-failure-320",
+    "note": "Real invalid paste validation; original text stays editable.",
+    "actions": [
+      "Generated result",
+      "Validate & review"
+    ],
+    "viewport": {
+      "width": 320,
+      "height": 850
+    },
+    "scrollWidth": 320,
+    "clientWidth": 320,
+    "overflow": [],
+    "unlabeled": []
+  },
+  {
+    "name": "options-load-failure-360",
+    "note": "Synthetic unsupported profile schema stored in disposable Chrome; production recovery screen, no mocked error function.",
+    "actions": [
+      "Retry loading",
+      "Passphrase",
+      "Export encrypted backup",
+      "Inspect backup…"
+    ],
+    "viewport": {
+      "width": 360,
+      "height": 850
+    },
+    "scrollWidth": 360,
+    "clientWidth": 360,
+    "overflow": [],
+    "unlabeled": []
+  }
+]

@@ -1,26 +1,26 @@
 # Code audit — September 6, 2026
 
-> Historical provenance correction (September 9, 2026): the short hashes below are not present in this repository. The fixes exist under different hashes; use the verified mapping in [the current review](docs/CODEBASE_REVIEW.md#historical-provenance-correction). Current baseline: Thermo `c73bd2c`, 175 passing tests, Chrome installation still rejected, and two moderate development dependency audit entries. See [the overhaul plan](docs/OVERHAUL_PLAN.md) for proposed repairs and acceptance gates.
+> Historical report, with commit hashes corrected against repository history on September 9, 2026. Results and limitations below describe the September 6 audit. The overhaul supersedes those limitations where explicitly verified in the [current release evidence](docs/REVIEW_RESOLUTION.md); the [baseline review](docs/CODEBASE_REVIEW.md#historical-provenance-correction) retains the old-to-actual hash mapping.
 
-Reviewed the application source, entrypoints, configuration, README, and all existing unit tests from baseline `6ba21cc`. Implemented the following thirteen findings in separate commits, each pushed to `bornayo7/jobpilot` on `master`. This is a code and automated-test audit; no real job applications were submitted, paid provider calls made, or live Chrome/ATS flows exercised.
+Reviewed the application source, entrypoints, configuration, README, and all existing unit tests from baseline `faf1890`. Implemented the following thirteen findings in separate commits, each pushed to `bornayo7/jobpilot` on `master`. This is a code and automated-test audit; no real job applications were submitted, paid provider calls made, or live Chrome/ATS flows exercised.
 
 ## Implemented findings
 
 | Commit | Failure scenario | Change and regression coverage |
 |---|---|---|
-| `4d7d721` | Automatic rules overrode saved manual mappings. | Apply user corrections before adapters and heuristics; test overrides and explicit unknown mappings. |
-| `0c88ced` | An old asynchronous plan could replace a newer plan or use the wrong profile's resume. | Bind resume lookup to profile, invalidate obsolete requests and missing frames, clear stale rows, disable Fill while resolving; test stale success/failure and disappearing frames. |
-| `efb4b16` | pdf.js could transfer and detach the PDF bytes needed for saving. | Validate a copy and always destroy the PDF task; simulate transferable-buffer ownership and failure cleanup. |
-| `dbb4bcc` | Edited drafts or changed job/profile context retained obsolete approval state. | Invalidate previews/reviews and reject stale async completions; test draft edits and context changes. Invalidate resume-import validation after edits too. |
-| `4665341` | A malformed backup or late storage failure could partially erase stored data. | Validate all stores and decode files before writes, replace IndexedDB in one transaction, compensate if local storage fails, and include legacy profiles during export; test round-trip, malformed inputs, transaction abort and compensation. |
-| `437e46f` | The installed happy-dom test dependency had critical/high security advisories. | Update happy-dom to 20.14.0 with lockfile; full regression suite and npm audit pass. |
-| `c80a8d0` | Discovery/execution could target disabled, read-only, password or incompatible controls. | Respect fieldset/legend and disabled-option semantics, reject unsafe action/control combinations, and recheck at execution; DOM regressions cover these paths. |
-| `e4c2cf1` | Dropdown selection could choose an unrelated/hidden option, or match “No” to “Now”. | Scope by ARIA associations, filter unavailable options, use whole-token matching; test unrelated dropdowns, hidden/disabled options and missing targets. |
-| `5b65ce5` | Unrelated JSON or a future schema could validate as an empty/current profile. | Require a recognized profile section and reject unsupported future versions; import regressions added. |
-| `33b638e` | Navigation, reconnects and rescans retained old fields or job descriptions. | Reset panel state on navigation, guard replaced ports, track JD frame ownership and clear JD before extraction; reducer regressions cover these transitions. |
-| `89a27b9` | Unrecognized fields appeared without a way to correct/fill them. | Make unmatched rows editable and promote corrections into the review plan; test manual value/kind edits and saved correction. |
-| `48aa90b` | Concurrent mapping reads/writes could lose new corrections or classifier results. | Serialize read-modify-write operations using Web Locks, with a same-context fallback where unavailable; test concurrent writes and lookup/write overlap. |
-| `b3983e0` | Cache eviction removed supposedly permanent manual corrections. | Apply the 2,000-entry eviction limit to model entries only; test correction survival after overflow. |
+| `b0c3699` | Automatic rules overrode saved manual mappings. | Apply user corrections before adapters and heuristics; test overrides and explicit unknown mappings. |
+| `7f96b07` | An old asynchronous plan could replace a newer plan or use the wrong profile's resume. | Bind resume lookup to profile, invalidate obsolete requests and missing frames, clear stale rows, disable Fill while resolving; test stale success/failure and disappearing frames. |
+| `0ebe7b8` | pdf.js could transfer and detach the PDF bytes needed for saving. | Validate a copy and always destroy the PDF task; simulate transferable-buffer ownership and failure cleanup. |
+| `d1de061` | Edited drafts or changed job/profile context retained obsolete approval state. | Invalidate previews/reviews and reject stale async completions; test draft edits and context changes. Invalidate resume-import validation after edits too. |
+| `9771d03` | A malformed backup or late storage failure could partially erase stored data. | Validate all stores and decode files before writes, replace IndexedDB in one transaction, compensate if local storage fails, and include legacy profiles during export; test round-trip, malformed inputs, transaction abort and compensation. |
+| `4a3fdca` | The installed happy-dom test dependency had critical/high security advisories. | Update happy-dom to 20.14.0 with lockfile; full regression suite and npm audit pass. |
+| `9009d0d` | Discovery/execution could target disabled, read-only, password or incompatible controls. | Respect fieldset/legend and disabled-option semantics, reject unsafe action/control combinations, and recheck at execution; DOM regressions cover these paths. |
+| `0a0e328` | Dropdown selection could choose an unrelated/hidden option, or match “No” to “Now”. | Scope by ARIA associations, filter unavailable options, use whole-token matching; test unrelated dropdowns, hidden/disabled options and missing targets. |
+| `387db76` | Unrelated JSON or a future schema could validate as an empty/current profile. | Require a recognized profile section and reject unsupported future versions; import regressions added. |
+| `a576bcb` | Navigation, reconnects and rescans retained old fields or job descriptions. | Reset panel state on navigation, guard replaced ports, track JD frame ownership and clear JD before extraction; reducer regressions cover these transitions. |
+| `6851cd0` | Unrecognized fields appeared without a way to correct/fill them. | Make unmatched rows editable and promote corrections into the review plan; test manual value/kind edits and saved correction. |
+| `2bd4a25` | Concurrent mapping reads/writes could lose new corrections or classifier results. | Serialize read-modify-write operations using Web Locks, with a same-context fallback where unavailable; test concurrent writes and lookup/write overlap. |
+| `663ddb3` | Cache eviction removed supposedly permanent manual corrections. | Apply the 2,000-entry eviction limit to model entries only; test correction survival after overflow. |
 
 ## Verification
 

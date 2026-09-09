@@ -1,20 +1,20 @@
 # JobPilot overhaul and Thermo integration plan
 
-Prepared September 9, 2026 after the [full codebase review](CODEBASE_REVIEW.md). **Approved and being implemented.** Yash approved every stage and new decisions on September 9; teaching is deferred until requested. Source baseline: `Thermo` at `c73bd2c`; `master` at `2315bdd`.
+Prepared September 9, 2026 after the [full codebase review](CODEBASE_REVIEW.md). **Approved implementation and release qualification completed.** Yash approved every stage and new decisions on September 9; teaching is deferred until requested. Source baseline: `Thermo` at `c73bd2c`; `master` at `2315bdd`. Final integration follows the verified fast-forward procedure below.
 
-Installation checkpoint `5a9392b` is pushed on Thermo: clean-install typecheck/build, 176 unit tests, two Chromium extension tests, native Chrome 153 packaging, generated-manifest checks and zero dependency advisories pass. GitHub Actions has been added. Stages 2–7 are in progress; final release qualification and master integration remain pending. See [accepted contracts](decisions/0001-application-ownership-and-recovery.md).
+Verified checkpoints are `5a9392b` (installation), `6df0f8f` (provider contracts), `24fb97e` (integrated state/fill/document/workbench contracts), and `e8920e1` (final accessible error announcements). The integrated source passes a fresh install, 341 unit tests, 13 browser workflows, typecheck/build/manifest checks, native Chrome packaging, zero dependency advisories, and Windows/Linux CI. The state contracts were committed together because their callers and persistence boundaries change together. See the [resolution map and qualification limits](REVIEW_RESOLUTION.md), [implemented architecture](../ARCHITECTURE.md), and [accepted contracts](decisions/0001-application-ownership-and-recovery.md).
 
 ## Outcome
 
 A loadable extension whose reviewed form values stay attached to the correct application, whose edits survive asynchronous work, whose documents and backups recover predictably, and whose UI reports what actually completed. Retain the existing local-first architecture, React/WXT stack, user-controlled submission and subscription copy/paste writing workflow.
 
-“Everything works perfectly” becomes explicit acceptance evidence below. Passing tests alone is insufficient: today's build passes 175 tests but Chrome refuses to load it. No claim will be made for a portal, provider or browser that was not exercised.
+“Everything works perfectly” becomes explicit acceptance evidence below. Passing tests alone is insufficient: the reviewed baseline passed 175 tests while Chrome refused to load it. The installation checkpoint repairs that baseline failure; final behavior still needs the complete gates below. No claim will be made for a portal, provider or browser that was not exercised.
 
 ## Architectural approach
 
 Keep Thermo's useful simplifications. Do not replace the extension framework or introduce a generic state/event framework. Deepen the modules whose callers currently have to coordinate too many facts.
 
-| Module | Proposed interface and invariants | Implementation hidden at the seam |
+| Module | Approved interface and invariants | Implementation hidden at the seam |
 |---|---|---|
 | Profile/settings editing | Read an identity/revision snapshot; patch a named record; save or return a conflict; discard a draft. An active-profile switch never changes the target of an existing save. | Chrome storage coordination, validation, metadata notifications, dirty/base state and conflict detection. |
 | Fill session | Observe current form state; edit reviewed values; execute one run. Only the originating document can execute that run or supply its results. | Relevant-input comparison, manual overlays, file reads, port request IDs, acknowledgements, timeouts, cancellation and progress. |
@@ -25,7 +25,7 @@ Keep Thermo's useful simplifications. Do not replace the extension framework or 
 
 Pure interpretation and comparison modules need no extra adapter. IndexedDB behavior is exercised with fake-indexeddb plus real-browser integration. Storage and ports need clone-faithful/event-order-faithful test adapters because browser behavior varies there. External provider transports are mocked for deterministic contracts, then qualified separately when configured. Do not add a seam that has no actual alternative or meaningful test adapter.
 
-Example: `saveProfile(profile)` currently makes callers know which profile will be active after a wait. A proposed `saveProfile({ id, baseRevision, patch })` hides that timing problem and returns a conflict instead of guessing. That is the useful simplification: move responsibility into the module that can enforce it, rather than adding more watchers to every caller.
+The implemented `loadProfileSnapshot()` / `saveProfileSnapshot(base, next)` contract binds a save to its original profile ID and revision and returns a conflict for a stale base. It replaces the baseline anonymous `saveProfile(profile)` behavior that depended on whichever profile became active after a wait. Settings and editable collection rows use field patches where independent changes can merge.
 
 ## Ordered implementation milestones
 
@@ -157,7 +157,7 @@ Alternative considered: a mandatory step-by-step wizard. The recommended workben
 
 ## Thermo → master procedure
 
-The branch already exists as **`Thermo`**, not `thermo`. It has no upstream remote branch at the reviewed baseline. No cherry-pick, branch recreation, rebase, conflict resolution or history rewrite is currently necessary. GitHub authentication works and master reports no branch protection; recheck rules before integration.
+The branch is **`Thermo`**, not `thermo`, and now tracks `origin/Thermo`; it had no upstream at the reviewed baseline. No history rewrite is planned. Recheck authentication, branch rules, remote state, and ancestry immediately before integration rather than relying on the baseline observations.
 
 1. Keep implementation on `Thermo`. Commit only reviewed files and push verified milestones with `git push -u origin Thermo` for its first publication and `git push origin Thermo` thereafter. The planning documentation may be checkpointed there before implementation; that is not master integration.
 2. At final integration, fetch again and check the clean working tree, remote state, exact tested commit and ancestry. If master advanced, merge `origin/master` into Thermo, inspect both intents for each conflicting hunk, resolve without discarding either feature, rerun all affected checks and final release gates, then push Thermo again. Never force-push to solve divergence.

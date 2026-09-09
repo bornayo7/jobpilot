@@ -1,10 +1,10 @@
 # JobPilot codebase review — September 9, 2026
 
-Status: review complete; implementation proposed. Application source has not been changed by this review.
+Status: completed baseline review. The findings and evidence below describe the pinned source before implementation. The approved overhaul is implemented and verified at `24fb97e`; see [REVIEW_RESOLUTION.md](REVIEW_RESOLUTION.md) for the current code/test mapping, release evidence, and qualification limits.
 
 Reviewed source: `Thermo` at `c73bd2cf97d00902f1a258cbf070ab943657b29c`. Comparison: `master` and freshly fetched `origin/master` at `2315bdd752cec4dcdcc661ffd4bc630df62bbc51`.
 
-## Recommendation
+## Baseline recommendation
 
 Retain the eleven Thermo commits, repair the demonstrated resolver regression, and complete an in-place overhaul of state ownership and verification before merging. The branch improves locality: typed fill actions, exhaustive profile getters, shared review-row construction, a submission module, and smaller UI files. Those improvements do not establish correctness of the workflows they preserve.
 
@@ -32,7 +32,7 @@ Review probes used actual source with in-memory/fake IndexedDB, structured-cloni
 
 Chrome evidence: `C:\Users\yashb\AppData\Local\Temp\jobpilot-manifest-review-140fddd08ef04cd585c27ba9df0feed0\stderr.txt`. The optional temporary-manifest split experiment was blocked by automatic approval review with only “blocked by policy”; it did not execute. No packaging success for that proposal is claimed here.
 
-## Findings
+## Baseline findings
 
 P1 means a release-blocking installation or integrity issue. P2 means a concrete correctness or maintainability defect requiring repair in this overhaul. “Existing” means also present on master; this distinguishes it from a Thermo regression.
 
@@ -56,7 +56,7 @@ P1 means a release-blocking installation or integrity issue. P2 means a concrete
 | JP-16 | P2 / verification maintenance | Lockfile contains Vitest 3.2.7. The audit now flags Vitest and its mocker under GHSA-82fw-gwwq-j7x9. This concerns development-server configuration, not a demonstrated exploit in the packaged extension. | Upgrade to a supported patched version compatible with WXT, verify plugin/types and the full suite, then re-audit. Avoid an unreviewed force upgrade. |
 | JP-17 | P2 / existing | `src/lib/fill/dom/pickFromListbox.ts:30` treats clicking an option as success without confirming committed selection. A probe with no selection handler reports Austin although the trigger stays Choose. `executor.ts:70` can report a text write as verified before a timer resets it. | Distinguish an attempted action from observed committed state, use control-specific bounded settling checks, and report unverified outcomes honestly. Test with actual browser-controlled widgets. |
 
-## UI and capability gaps included in the plan
+## Baseline UI and capability gaps included in the plan
 
 - Collections load once or on URL change, so the current Fill view can miss newly reusable answers, and version/default indicators can become stale across surfaces. `FramePlanView` passes no current application identity to answer ranking.
 - Profile import review needs an explicit destination profile and invalidation on a destination change.
