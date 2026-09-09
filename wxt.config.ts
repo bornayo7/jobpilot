@@ -40,6 +40,11 @@ export default defineConfig({
       'http://localhost/*',
     ],
     optional_host_permissions: ['<all_urls>'],
+    // The bundled react-pdf layout engine uses WebAssembly. MV3 permits this
+    // narrowly scoped capability without allowing string eval or remote code.
+    content_security_policy: {
+      extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
+    },
     action: {
       default_title: 'JobPilot',
     },

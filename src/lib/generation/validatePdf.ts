@@ -1,31 +1,15 @@
 import type { ResumeVersion } from '../schema/resumeVersion';
+import { resumeContent } from './resumeContent';
+import { PDF_TOKEN_LIMIT } from './pdfText';
 
-export interface PdfValidation {
-  ok: boolean;
-  problems: string[];
-}
+export interface PdfValidation { ok: boolean; problems: string[] }
 
-/**
- * Extract the PDF's text layer in reading order via pdf.js. This is the cheap,
- * reliable proxy for "an ATS can parse this": if select-all-copy-paste yields
- * the content in order, parsers handle it.
- */
 export async function extractPdfText(bytes: ArrayBuffer): Promise<string> {
-  // Browser: modern build + real worker via Vite's asset URL. Node (tests):
-  // the legacy build, which ships DOMMatrix/Path2D shims and a fake worker.
-  const pdfjs =
-    typeof window === 'undefined'
-      ? ((await import('pdfjs-dist/legacy/build/pdf.mjs')) as typeof import('pdfjs-dist'))
-      : await import('pdfjs-dist');
-  if (typeof window !== 'undefined' && !pdfjs.GlobalWorkerOptions.workerSrc) {
-    pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-      'pdfjs-dist/build/pdf.worker.min.mjs',
-      import.meta.url,
-    ).toString();
-  }
-
-  // pdf.js transfers this buffer to its worker. Keep the caller's PDF intact:
-  // approval stores those same bytes after validation completes.
+  // Build-time SSR pruning keeps the Node compatibility bundle out of the
+  // extension. Both adapters are lazy; ordinary panel startup loads neither.
+  const { pdfjs } = import.meta.env.SSR && typeof window === 'undefined'
+    ? await import('./pdfNode')
+    : await import('./pdfBrowser');
   const loadingTask = pdfjs.getDocument({ data: new Uint8Array(bytes.slice(0)) });
   try {
     const doc = await loadingTask.promise;
@@ -33,9 +17,7 @@ export async function extractPdfText(bytes: ArrayBuffer): Promise<string> {
     for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
       const page = await doc.getPage(pageNum);
       const content = await page.getTextContent();
-      for (const item of content.items) {
-        if ('str' in item && item.str) parts.push(item.str);
-      }
+      for (const item of content.items) if ('str' in item && item.str) parts.push(item.str);
     }
     return parts.join(' ');
   } finally {
@@ -43,67 +25,44 @@ export async function extractPdfText(bytes: ArrayBuffer): Promise<string> {
   }
 }
 
-/**
- * Assert the rendered PDF actually carries the version's content, in order.
- * Runs at generation time — a version that fails cannot be marked usable.
- */
+/** Complete content/order check, shared with DOCX verification. This tests the
+ * text layer, not the behavior of every ATS parser or the visual page layout. */
 export function validateExtractedText(text: string, version: ResumeVersion): PdfValidation {
   const problems: string[] = [];
   const normalized = normalize(text);
-
-  const mustContain: { what: string; value: string }[] = [
-    { what: 'name', value: version.basics.name },
-    ...(version.basics.email ? [{ what: 'email', value: version.basics.email }] : []),
-    ...version.experience.map((e) => ({ what: `company "${e.company}"`, value: e.company })),
-    ...version.experience.flatMap((e) =>
-      e.bullets.map((b) => ({ what: `bullet "${b.slice(0, 40)}…"`, value: b })),
-    ),
-    ...version.education.map((e) => ({ what: `school "${e.school}"`, value: e.school })),
-    ...version.skills.flatMap((g) => g.items.slice(0, 3).map((s) => ({ what: `skill "${s}"`, value: s }))),
-  ];
-
-  for (const { what, value } of mustContain) {
-    if (value && !normalized.includes(normalize(value))) {
-      problems.push(`Missing from extracted text: ${what}`);
-    }
+  let cursor = 0;
+  for (const item of resumeContent(version)) {
+    const value = normalize(item.text);
+    const limit = item.label === 'name' ? 26 : PDF_TOKEN_LIMIT;
+    const match = findValue(normalized, value, cursor, limit);
+    if (match) cursor = match.end;
+    else if (findValue(normalized, value, 0, limit)) problems.push(`Reading order or repeated content broken: ${item.label} "${item.text.slice(0, 60)}"`);
+    else problems.push(`Missing from extracted text: ${item.label} "${item.text.slice(0, 60)}"`);
   }
-
-  // Reading order: name before experience content, experience before education
-  // (when both exist) — a scrambled text layer breaks this immediately.
-  const nameIdx = normalized.indexOf(normalize(version.basics.name));
-  const firstBullet = version.experience[0]?.bullets[0];
-  if (firstBullet) {
-    const bulletIdx = normalized.indexOf(normalize(firstBullet));
-    if (bulletIdx !== -1 && nameIdx > bulletIdx) {
-      problems.push('Reading order broken: name appears after experience content');
-    }
-  }
-  const firstSchool = version.education[0]?.school;
-  if (firstBullet && firstSchool) {
-    const bulletIdx = normalized.indexOf(normalize(firstBullet));
-    const schoolIdx = normalized.indexOf(normalize(firstSchool));
-    if (bulletIdx !== -1 && schoolIdx !== -1 && schoolIdx < bulletIdx) {
-      problems.push('Reading order broken: education precedes experience in the text layer');
-    }
-  }
-
-  // Soft hyphens or replacement chars in the layer = font/hyphenation problem.
-  if (/[­�]/.test(text)) {
-    problems.push('Text layer contains soft hyphens or replacement characters');
-  }
-
+  if (/[\u00ad\ufffd]/u.test(text)) problems.push('Text layer contains soft hyphens or replacement characters');
   return { ok: problems.length === 0, problems };
 }
-
 export async function validateResumePdf(bytes: ArrayBuffer, version: ResumeVersion): Promise<PdfValidation> {
-  try {
-    const text = await extractPdfText(bytes);
-    return validateExtractedText(text, version);
-  } catch (err) {
-    return { ok: false, problems: [`PDF text extraction failed: ${String(err).slice(0, 200)}`] };
-  }
+  try { return validateExtractedText(await extractPdfText(bytes), version); }
+  catch (error) { return { ok: false, problems: [`PDF text extraction failed: ${String(error).slice(0, 200)}`] }; }
 }
-
-function normalize(text: string): string {
-  return text.toLowerCase().replace(/\s+/g, ' ').trim();
+function normalize(text: string): string { return text.normalize('NFKC').toLowerCase().replace(/\s+/gu, ' ').trim(); }
+function findValue(text: string, value: string, start: number, limit: number): { end: number } | null {
+  if (!value) return { end: start };
+  // Technical tokens must not turn C into C#, Go into Google, or 40 into 40%.
+  const word = /[\p{L}\p{N}+#.%]/u;
+  const escape = (part: string) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Only overlong original tokens can acquire line breaks. Ordinary words and
+  // short technical tokens still require their exact original separation.
+  const pattern = value.split(' ').map(token => Array.from(token).length > limit
+    ? Array.from(token).map(escape).join('\\s*') : escape(token)).join(' ');
+  const expression = new RegExp(pattern, 'gu');
+  expression.lastIndex = start;
+  for (let match = expression.exec(text); match; match = expression.exec(text)) {
+    const found = match.index;
+    const before = text[found - 1]; const after = text[found + match[0].length];
+    if ((!before || !word.test(before) || !word.test(value[0]!)) &&
+      (!after || !word.test(after) || !word.test(value[value.length - 1]!))) return { end: found + match[0].length };
+  }
+  return null;
 }

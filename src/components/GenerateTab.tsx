@@ -9,16 +9,17 @@ import {
 } from '@lib/prompts/promptStudio/builders';
 import { importResumePaste, type BulletDiff } from '@lib/generation/importResult';
 import type { ResumeVersion } from '@lib/schema/resumeVersion';
-import { renderResumePdf } from '@lib/generation/renderPdf';
-import { renderResumeDocx } from '@lib/generation/renderDocx';
-import { validateResumePdf } from '@lib/generation/validatePdf';
-import { storeCoverLetter, storeResumeVersion } from '@lib/generation/storeVersion';
+import { prepareCoverLetter, storePreparedVersion, storeResumeVersion } from '@lib/generation/storeVersion';
 import { deleteVersion, listVersions, type VersionRecord } from '@lib/storage/versions';
 import { computeMatchGap } from '@lib/memory/matchGap';
 import { saveAnswer } from '@lib/memory/answers';
 import { companyFromUrl } from '@lib/tracker/detect';
 import { ResumeReview } from './ResumeReview';
 import { VersionLibrary } from './VersionLibrary';
+import { useCollection } from './useCollection';
+import { useGenerationDraft } from './useGenerationDraft';
+import { DocumentInUseError } from '@lib/storage/documents';
+import { applicationId } from '@lib/tracker/applicationId';
 
 type PromptType = 'resume' | 'coverLetter' | 'answer';
 
@@ -29,16 +30,19 @@ type Review =
   | { kind: 'text' };
 
 export function GenerateTab({ state, actions }: { state: PanelState; actions: Pick<PanelActions, 'extractJd'> }) {
-  const { profile, save: saveProfile } = useProfile();
-  const { settings, save: saveSettings } = useSettings();
-  const [promptType, setPromptType] = useState<PromptType>('resume');
-  const [question, setQuestion] = useState('');
+  const { profile, snapshot, save: saveProfile, error: profileError } = useProfile();
+  const { settings, patch: patchSettings, error: settingsError } = useSettings();
+  const draft = useGenerationDraft(state.tabUrl, snapshot?.id ?? null);
+  const { promptType, question, pasted } = draft.value;
   const [copied, setCopied] = useState(false);
-  const [pasted, setPasted] = useState('');
   const [review, setReview] = useState<Review | null>(null);
   const [busy, setBusy] = useState('');
   const [problems, setProblems] = useState<string[]>([]);
-  const [versions, setVersions] = useState<VersionRecord[]>([]);
+  const { items: versions, error: versionsError, refresh: refreshVersions } = useCollection(listVersions);
+  const [notice, setNotice] = useState('');
+  const [tone, setTone] = useState('');
+  const [toneDirty, setToneDirty] = useState(false);
+  const [toneSaving, setToneSaving] = useState(false);
   const [previewUrl, setPreviewUrl] = useState('');
   const previewBytes = useRef<ArrayBuffer | null>(null);
   /** Bumped whenever the review is discarded, so an async render or approval
@@ -51,14 +55,17 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Pi
     setReview(null);
     setProblems([]);
     setPreviewUrl('');
+    setBusy('');
     previewBytes.current = null;
   };
 
-  useEffect(discardReview, [state.tabId, state.tabUrl, profile]);
+  const context = JSON.stringify([state.tabId, state.tabUrl, snapshot?.id, snapshot?.revision, state.jd?.text, draft.id, promptType, question, pasted]);
+  const liveContext = useRef(context);
+  if (liveContext.current !== context) { liveContext.current = context; reviewRevision.current++; }
+  useEffect(discardReview, [context]);
+  useEffect(() => () => { reviewRevision.current++; }, []);
   useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
-  useEffect(() => {
-    void listVersions().then(setVersions);
-  }, []);
+  useEffect(() => { if (settings && !toneDirty) setTone(settings.promptStyle.tone); }, [settings, toneDirty]);
 
   // Memoized on its inputs: the match gap tokenizes up to 60k characters and
   // the prompt serializes the whole profile, and both are keyed on this
@@ -83,9 +90,11 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Pi
   }, [profile, settings, job, promptType, question]);
 
   const copyPrompt = async () => {
-    await navigator.clipboard.writeText(prompt);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch (err) { setNotice(`Prompt could not be copied. ${String(err)}`); }
   };
 
   const runReview = async () => {
@@ -105,6 +114,7 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Pi
     const revision = reviewRevision.current;
     setBusy('Rendering preview…');
     try {
+      const { renderResumePdf } = await import('@lib/generation/renderPdf');
       const bytes = await renderResumePdf(result.version);
       if (reviewRevision.current !== revision) return;
       previewBytes.current = bytes;
@@ -113,7 +123,7 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Pi
       if (reviewRevision.current !== revision) return;
       setProblems([`Preview render failed: ${String(err).slice(0, 200)}`]);
     } finally {
-      setBusy('');
+      if (reviewRevision.current === revision) setBusy('');
     }
   };
 
@@ -123,6 +133,7 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Pi
     const revision = reviewRevision.current;
     setBusy('Validating ATS parseability…');
     try {
+      const [{ renderResumePdf }, { validateResumePdf }] = await Promise.all([import('@lib/generation/renderPdf'), import('@lib/generation/validatePdf')]);
       const pdfBytes = previewBytes.current ?? (await renderResumePdf(version));
       const validation = await validateResumePdf(pdfBytes, version);
       if (reviewRevision.current !== revision) return;
@@ -131,23 +142,26 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Pi
         return;
       }
       setBusy('Rendering DOCX…');
+      const { renderResumeDocx } = await import('@lib/generation/renderDocx');
       const docxBytes = await renderResumeDocx(version);
       if (reviewRevision.current !== revision) return;
-      await storeResumeVersion({ version, jobUrl: job.url, fallbackName: job.title, pdfBytes, docxBytes });
+      await storeResumeVersion({ version, jobUrl: job.url, fallbackName: job.title, pdfBytes, docxBytes, profileId: snapshot?.id, profileRevision: snapshot?.revision });
+      await refreshVersions();
+      if (reviewRevision.current !== revision) return;
       discardReview();
-      setPasted('');
-      setVersions(await listVersions());
+      draft.change({ pasted: '' });
+      setNotice(`Resume saved for ${version.meta.company || job.title}.`);
     } catch (err) {
       // Without this the rejection is unhandled and the button just goes idle,
       // leaving the user unsure whether the version was stored.
-      setProblems([`Could not store this version: ${String(err).slice(0, 200)}`]);
+      if (reviewRevision.current === revision) setProblems([`Could not store this version: ${String(err).slice(0, 200)}`]);
     } finally {
-      setBusy('');
+      if (reviewRevision.current === revision) setBusy('');
     }
   };
 
   const approveText = async () => {
-    if (review?.kind !== 'text' || !job || !profile) return;
+    if (review?.kind !== 'text' || !job || !profile || busy) return;
     const text = pasted.trim();
     if (!text) return;
 
@@ -155,49 +169,62 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Pi
     // the employer. Derive the company from the ATS URL the way the tracker
     // does, and keep the page title only as a fallback.
     const company = companyFromUrl(job.url) || job.title;
+    const revision = reviewRevision.current;
     setProblems([]);
 
     if (promptType === 'answer') {
       // Generated answers live in the bank, jobless and NON-reusable by
       // default — flipping the flag is a deliberate act (anti-answer-bleed).
       try {
-        await saveAnswer({ questionRaw: question.trim() || 'Custom answer', answer: text, jobId: '', company, reusable: false });
+        setBusy('Saving answer…');
+        await saveAnswer({ questionRaw: question.trim() || 'Custom answer', answer: text, jobId: '', company, reusable: false, origin: 'generated', applicationId: applicationId(job.url) ?? undefined, profileId: snapshot?.id, profileRevision: snapshot?.revision });
+        if (reviewRevision.current !== revision) return;
+        discardReview();
+        draft.change({ pasted: '' });
+        setNotice('Answer saved for review in the answers bank.');
       } catch (err) {
-        setProblems([`Could not save this answer: ${String(err).slice(0, 200)}`]);
-        return;
-      }
-      discardReview();
-      setPasted('');
+        if (reviewRevision.current === revision) setProblems([`Could not save this answer: ${String(err).slice(0, 200)}`]);
+      } finally { if (reviewRevision.current === revision) setBusy(''); }
       return;
     }
 
     setBusy('Rendering PDF…');
     try {
-      await storeCoverLetter({ text, profile, company, jobUrl: job.url });
+      const prepared = await prepareCoverLetter({ text, profile, company, jobUrl: job.url, profileId: snapshot?.id, profileRevision: snapshot?.revision });
+      if (reviewRevision.current !== revision) return;
+      await storePreparedVersion(prepared);
+      await refreshVersions();
+      if (reviewRevision.current !== revision) return;
       discardReview();
-      setPasted('');
-      setVersions(await listVersions());
+      draft.change({ pasted: '' });
+      setNotice(`Cover letter saved for ${company}.`);
     } catch (err) {
-      setProblems([`Could not store this cover letter: ${String(err).slice(0, 200)}`]);
+      if (reviewRevision.current === revision) setProblems([`Could not store this cover letter: ${String(err).slice(0, 200)}`]);
     } finally {
-      setBusy('');
+      if (reviewRevision.current === revision) setBusy('');
     }
   };
 
   const setDefaultResume = async (record: VersionRecord) => {
     if (!profile || !record.pdfBlobId) return;
-    await saveProfile({ ...profile, documents: { ...profile.documents, defaultResumeId: record.pdfBlobId } });
+    try { await saveProfile({ ...profile, documents: { ...profile.documents, defaultResumeId: record.pdfBlobId } }); setNotice(`${record.label} is now the default resume for ${snapshot?.name || 'this profile'}.`); }
+    catch (err) { setNotice(`Default resume was not changed. ${String(err)}`); }
   };
 
-  const updateTone = async (tone: string) => {
-    if (!settings) return;
-    await saveSettings({ ...settings, promptStyle: { ...settings.promptStyle, tone } });
+  const saveTone = async () => {
+    if (!settings || !toneDirty || toneSaving) return;
+    setToneSaving(true);
+    try { await patchSettings({ promptStyle: { tone } }); setToneDirty(false); }
+    catch (err) { setNotice(`Writing tone was not saved. ${String(err)}`); }
+    finally { setToneSaving(false); }
   };
 
   if (state.tabId === null) return <div className="placeholder"><p>No active tab.</p></div>;
 
   return (
     <div className="generate-tab">
+      {(notice || profileError || settingsError || versionsError) && <p className="notice" role="status">{notice || profileError || settingsError || versionsError}</p>}
+      {draft.error && <div className="warn-box" role="alert">{draft.error}<button onClick={() => void draft.reload()}>Reload saved draft</button></div>}
       <section>
         <h2 className="gen-h">1 · Scan the job posting</h2>
         <button className="primary" onClick={() => actions.extractJd(state.tabId!)}>
@@ -242,9 +269,10 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Pi
             ).map(([value, label]) => (
               <button
                 key={value}
+                disabled={draft.loading}
                 className={promptType === value ? 'primary' : ''}
                 onClick={() => {
-                  setPromptType(value);
+                  draft.change({ promptType: value });
                   discardReview();
                 }}
               >
@@ -254,16 +282,18 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Pi
           </div>
           {promptType === 'answer' && (
             <textarea
+              aria-label="Application question"
+              disabled={draft.loading}
               className="paste-area"
               rows={2}
               placeholder="Paste the application question here…"
               value={question}
-              onChange={(e) => setQuestion(e.target.value)}
+              onChange={(e) => { draft.change({ question: e.target.value }); discardReview(); }}
             />
           )}
           <label className="field" style={{ margin: '8px 0' }}>
             Writing tone
-            <input value={settings.promptStyle.tone} onChange={(e) => void updateTone(e.target.value)} />
+            <input disabled={toneSaving} value={tone} onChange={(e) => { setTone(e.target.value); setToneDirty(true); }} onBlur={() => void saveTone()} />
           </label>
           <div className="copy-row">
             <button className="primary" onClick={copyPrompt} disabled={!prompt}>
@@ -283,6 +313,8 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Pi
         <section>
           <h2 className="gen-h">3 · Paste the result back</h2>
           <textarea
+            aria-label="Generated result"
+            disabled={draft.loading}
             className="paste-area"
             rows={6}
             placeholder={
@@ -292,14 +324,12 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Pi
             }
             value={pasted}
             onChange={(e) => {
-              setPasted(e.target.value);
-              // A text review stands for "you read what is in the box", so
-              // edits are what gets saved; a resume review is of parsed JSON
-              // and must be redone once that JSON changes.
-              if (promptType === 'resume') discardReview();
+              draft.change({ pasted: e.target.value });
+              discardReview();
             }}
           />
-          <button onClick={() => void runReview()} disabled={!pasted.trim() || !!busy}>
+          <p className="hint" role="status">{draft.loading ? 'Loading this application’s draft…' : draft.saving ? 'Saving draft…' : draft.error ? 'Draft needs attention' : 'Draft saved on this device for this application and profile.'}</p>
+          <button onClick={() => void runReview()} disabled={draft.loading || !pasted.trim() || !!busy}>
             {promptType === 'resume' ? 'Validate & review' : 'Review'}
           </button>
 
@@ -329,7 +359,7 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Pi
 
           {review?.kind === 'text' && (
             <div style={{ marginTop: 8 }}>
-              <p className="hint">Read it above — edits you make in the box are what gets saved.</p>
+              <p className="hint">Review the text above. Editing it starts a fresh review.</p>
               <button className="primary" onClick={() => void approveText()} disabled={!!busy}>
                 {busy ||
                   (promptType === 'answer' ? 'Save to answers bank' : 'Save + render PDF')}
@@ -354,10 +384,17 @@ export function GenerateTab({ state, actions }: { state: PanelState; actions: Pi
       <VersionLibrary
         versions={versions}
         defaultResumeBlobId={profile?.documents.defaultResumeId ?? null}
-        onSetDefault={(record) => void setDefaultResume(record)}
+        onSetDefault={setDefaultResume}
         onDelete={async (record) => {
-          await deleteVersion(record.id);
-          setVersions(await listVersions());
+          try {
+            try { await deleteVersion(record.id); }
+            catch (err) {
+              if (!(err instanceof DocumentInUseError)) throw err;
+              if (!confirm(`This version is selected by ${err.references.map((ref) => ref.profileName).join(', ')}. Delete it and clear those selections?`)) return;
+              await deleteVersion(record.id, { clearDefaults: true });
+            }
+            await refreshVersions(); setNotice('Version deleted.');
+          } catch (err) { setNotice(`Version was not deleted. ${String(err)}`); }
         }}
       />
     </div>

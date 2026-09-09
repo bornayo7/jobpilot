@@ -21,12 +21,16 @@ export function FramePlanView({
   plan,
   fillResults,
   answerBank,
+  applicationId,
+  disabled = false,
   ...callbacks
 }: RowCallbacks & {
   frameLabel: string | null;
   plan: FramePlan;
   fillResults: PanelState['fillResults'];
   answerBank: AnswerRecord[];
+  applicationId: string;
+  disabled?: boolean;
 }) {
   const autoRows = plan.rows.filter((row) => !row.requiresReview);
   const reviewRows = plan.rows.filter((row) => row.requiresReview);
@@ -37,6 +41,8 @@ export function FramePlanView({
       row={row}
       result={fillResults.get(row.field.fieldId)}
       answerBank={answerBank}
+      applicationId={applicationId}
+      disabled={disabled}
       {...callbacks}
     />
   );
@@ -44,7 +50,6 @@ export function FramePlanView({
   return (
     <Fragment>
       {frameLabel && <div className="frame-header">{frameLabel}</div>}
-      {autoRows.map(renderRow)}
       {reviewRows.length > 0 && <div className="frame-header">Needs your review</div>}
       {reviewRows.map(renderRow)}
       {plan.unmatched.length > 0 && (
@@ -53,6 +58,8 @@ export function FramePlanView({
           {plan.unmatched.map((field) => renderRow(unmatchedRow(field)))}
         </>
       )}
+      {autoRows.length > 0 && <div className="frame-header">Ready to fill</div>}
+      {autoRows.map(renderRow)}
     </Fragment>
   );
 }
@@ -61,6 +68,8 @@ function RowView({
   row,
   result,
   answerBank,
+  applicationId,
+  disabled,
   onHover,
   onToggle,
   onValue,
@@ -69,13 +78,15 @@ function RowView({
   row: ReviewRow;
   result?: { ok: boolean; error?: string };
   answerBank: AnswerRecord[];
+  applicationId: string;
+  disabled: boolean;
 }) {
   const fieldId = row.field.fieldId;
   const valueText = instructionDisplay(row);
   const fillable = row.instruction !== null;
   const isQuestion = row.kind === 'question.freeText' || row.kind === 'question.choice';
   const suggestions = isQuestion
-    ? rankAnswers(row.field.label || row.field.ariaLabel || '', answerBank, '')
+    ? rankAnswers(row.field.label || row.field.ariaLabel || '', answerBank, applicationId)
     : [];
 
   return (
@@ -83,17 +94,17 @@ function RowView({
       id={`row-${fieldId}`}
       className={`review-row${row.sensitive ? ' sensitive' : ''}${row.include ? '' : ' excluded'}`}
       onMouseEnter={() => onHover(fieldId)}
+      onFocus={() => onHover(fieldId)}
     >
       <div className="review-top">
         <label className="include">
-          <input type="checkbox" checked={row.include} disabled={!fillable} onChange={() => onToggle(fieldId)} />
+          <input type="checkbox" checked={row.include} disabled={!fillable || disabled} onChange={() => onToggle(fieldId)} />
           <span className="field-label" title={row.field.label}>
             {row.field.label || row.field.name || '(unlabeled)'}
           </span>
           {row.field.required && <span className="req">*</span>}
         </label>
         <div className="field-meta">
-          <span className={`chip source-${row.source}`}>{row.source}</span>
           {row.sensitive && <span className="chip warn">verify</span>}
           {result && (
             <span className={result.ok ? 'chip ok' : 'chip fail'} title={result.error}>
@@ -107,6 +118,7 @@ function RowView({
           <span className="value-static">{valueText || 'no file'}</span>
         ) : row.field.control === 'checkbox' ? (
           <select
+            aria-label={`Answer for ${row.field.label || row.field.name}`} disabled={disabled}
             value={valueText === 'checked' ? 'checked' : 'unchecked'}
             onChange={(e) => onValue(fieldId, e.target.value === 'checked' ? 'yes' : 'no')}
           >
@@ -115,6 +127,7 @@ function RowView({
           </select>
         ) : (row.field.control === 'select' || row.field.control === 'radio') && row.field.options?.length ? (
           <select
+            aria-label={`Answer for ${row.field.label || row.field.name}`} disabled={disabled}
             value={typeof row.instruction?.value === 'string' ? row.instruction.value : ''}
             onChange={(e) => onValue(fieldId, e.target.value)}
           >
@@ -127,6 +140,7 @@ function RowView({
           </select>
         ) : isQuestion ? (
           <textarea
+            aria-label={`Answer for ${row.field.label || row.field.name}`} disabled={disabled}
             className="paste-area"
             rows={2}
             value={valueText}
@@ -135,24 +149,31 @@ function RowView({
           />
         ) : (
           <input
+            aria-label={`Answer for ${row.field.label || row.field.name}`} disabled={disabled}
             value={valueText}
             placeholder="(no value — type to fill)"
             onChange={(e) => onValue(fieldId, e.target.value)}
           />
         )}
-        <select className="kind-select" value={row.kind} onChange={(e) => onKind(fieldId, e.target.value as FieldKind)}>
+      </div>
+      {row.sensitive && !row.instruction && <p className="hint">Answer manually. The saved profile does not safely answer this question's wording or jurisdiction.</p>}
+      <details className="field-mapping">
+        <summary>Correct field mapping</summary>
+        <p className="hint">Matched by {row.source}. Changing this mapping is remembered for similar fields.</p>
+        <select aria-label={`Field mapping for ${row.field.label || row.field.name}`} disabled={disabled} className="kind-select" value={row.kind} onChange={(e) => onKind(fieldId, e.target.value as FieldKind)}>
           {ALL_FIELD_KINDS.map((kind) => (
             <option key={kind} value={kind}>
               {kind}
             </option>
           ))}
         </select>
-      </div>
+      </details>
       {suggestions.length > 0 && (
         <div className="suggestion-row">
           {suggestions.map(({ record, score }) => (
             <button
               key={record.id}
+              disabled={disabled}
               className="suggestion"
               title={record.answer}
               onClick={() => onValue(fieldId, record.answer)}

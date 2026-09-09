@@ -1,10 +1,11 @@
 import type { FileRef, FillInstruction, FillOutcome, FillResult, SerializedFile } from '../messaging/protocol';
 import { findByFieldId } from './discovery';
 import { setNativeChecked, setNativeValue } from './dom/setNativeValue';
-import { attachFileToInput } from './dom/attachFile';
+import { attachFileToInput, retainedAttachment } from './dom/attachFile';
 import { pickFromListbox } from './dom/pickFromListbox';
-import { pickRadio } from './dom/radioGroup';
+import { pickRadio, radioGroupOf, radioOptionLabel } from './dom/radioGroup';
 import { isUnavailable } from './dom/isUnavailable';
+import { waitForCommitted } from './dom/settle';
 
 /**
  * Runs in the content script. Executes fill instructions against stamped
@@ -14,12 +15,17 @@ import { isUnavailable } from './dom/isUnavailable';
 export async function executeInstructions(
   instructions: FillInstruction[],
   files: SerializedFile[] = [],
+  signal?: AbortSignal,
 ): Promise<FillResult[]> {
   const results: FillResult[] = [];
-  const fileByName = new Map(files.map((f) => [f.name, f]));
+  const fileByName = new Map(files.map((f) => [f.blobKey ?? f.name, f]));
 
   for (const instruction of instructions) {
-    results.push(await executeOne(instruction, fileByName));
+    if (signal?.aborted) {
+      results.push({ fieldId: instruction.fieldId, ok: false, error: 'Fill cancelled because its page changed' });
+      continue;
+    }
+    results.push(await executeOne(instruction, fileByName, signal));
   }
   return results;
 }
@@ -27,6 +33,7 @@ export async function executeInstructions(
 async function executeOne(
   instruction: FillInstruction,
   fileByName: Map<string, SerializedFile>,
+  signal?: AbortSignal,
 ): Promise<FillResult> {
   const { fieldId } = instruction;
   const el = findByFieldId(fieldId);
@@ -34,7 +41,16 @@ async function executeOne(
   if (isUnavailable(el)) return { fieldId, ok: false, error: 'control is disabled or read-only' };
 
   try {
-    return { fieldId, ...(await fill(el, instruction, fileByName)) };
+    const outcome = await fill(el, instruction, fileByName, signal);
+    if (!outcome.ok || instruction.action === 'pickListbox' && !isRadio(el)) return { fieldId, ...outcome };
+    const committed = await waitForCommitted(() => {
+      if (!el.isConnected || isUnavailable(el)) return false;
+      if (isRadio(el)) return radioGroupOf(el).some((r) => r.checked && radioOptionLabel(r) === outcome.verifiedValue);
+      if (instruction.action === 'setChecked') return (el as HTMLInputElement).checked === instruction.value;
+      if (instruction.action === 'attachFile') return retainedAttachment(el as HTMLInputElement)?.name === instruction.value.filename;
+      return ('value' in el ? (el as HTMLInputElement).value : el.textContent) === outcome.verifiedValue;
+    }, signal);
+    return { fieldId, ...outcome, ok: committed, ...(!committed ? { error: signal?.aborted ? 'Fill cancelled' : 'Page did not retain the value' } : {}) };
   } catch (err) {
     return { fieldId, ok: false, error: String(err) };
   }
@@ -44,6 +60,7 @@ async function fill(
   el: HTMLElement,
   instruction: FillInstruction,
   fileByName: Map<string, SerializedFile>,
+  signal?: AbortSignal,
 ): Promise<FillOutcome> {
   switch (instruction.action) {
     case 'setText':
@@ -57,7 +74,7 @@ async function fill(
       return attachFile(el, instruction.value, fileByName);
     case 'pickListbox':
       // Typing into a radio would overwrite its value attribute — pick instead.
-      return isRadio(el) ? pickRadio(el, instruction.value) : pickFromListbox(el, instruction.value);
+      return isRadio(el) ? pickRadio(el, instruction.value) : pickFromListbox(el, instruction.value, 3000, signal);
   }
 }
 
@@ -104,7 +121,7 @@ function attachFile(el: HTMLElement, ref: FileRef, fileByName: Map<string, Seria
   if (!(el instanceof HTMLInputElement) || el.type !== 'file') {
     return { ok: false, error: 'not a file input' };
   }
-  const file = fileByName.get(ref.filename);
+  const file = fileByName.get(ref.blobKey) ?? fileByName.get(ref.filename);
   if (!file) return { ok: false, error: 'file payload missing' };
   attachFileToInput(el, file);
   return { ok: el.files !== null && el.files.length > 0, verifiedValue: el.files?.[0]?.name };

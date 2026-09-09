@@ -12,6 +12,8 @@ import { taskConfigured } from '@lib/providers/router';
 import type { FillInstruction } from '@lib/messaging/protocol';
 
 export interface FramePlan {
+  documentId: string;
+  error?: string;
   rows: ReviewRow[];
   unmatched: ResolveOutcome['unmatched'];
   resolving: boolean;
@@ -19,7 +21,7 @@ export interface FramePlan {
 }
 
 export function useFillPlan(state: PanelState) {
-  const { profile } = useProfile();
+  const { profile, snapshot } = useProfile();
   // Settings saved in the Settings tab (a key added, routing changed, a
   // dealbreaker toggled) reach the plan live, without reopening the panel.
   const { settings } = useSettings();
@@ -29,6 +31,10 @@ export function useFillPlan(state: PanelState) {
   const [plans, setPlans] = useState<Map<number, FramePlan>>(new Map());
   const resolveKeys = useRef<Map<number, { key: string; token: symbol }>>(new Map());
   const resolveInputs = useRef<unknown[]>([]);
+  const manual = useRef(new Map<number, Map<string, { documentId: string; signature: string; row: ReviewRow }>>());
+  const profileKey = JSON.stringify([snapshot?.id, profile]);
+  const mappingKey = settings ? JSON.stringify([settings.routing.mapping, settings.anthropicKey, settings.openaiKey,
+    settings.openrouterKey, settings.ollamaBaseUrl, settings.lmstudioBaseUrl]) : '';
 
   useEffect(() => () => resolveKeys.current.clear(), []);
 
@@ -49,7 +55,7 @@ export function useFillPlan(state: PanelState) {
     // surfaces as the "no default resume" warning instead.
     void getDocumentMeta(id).then((doc) => {
       if (cancelled) return;
-      setResumeLookup({ profile, value: doc ? { blobId: doc.id, filename: doc.name } : null });
+      setResumeLookup({ profile, value: doc ? { blobId: doc.id, filename: doc.name, versionId: doc.versionId } : null });
     }).catch((err) => {
       console.error('[jobpilot] resume lookup failed', err);
       if (!cancelled) setResumeLookup({ profile, value: null });
@@ -66,10 +72,11 @@ export function useFillPlan(state: PanelState) {
   // happened to re-render its form, and profile edits made in the options page
   // never reached an open panel.
   useEffect(() => {
-    const inputs = [state.tabId, profile, settings, resume];
+    const inputs = [state.tabId, profileKey];
     if (inputs.some((value, index) => resolveInputs.current[index] !== value)) {
       resolveInputs.current = inputs;
       resolveKeys.current.clear();
+      manual.current.clear();
       setPlans(new Map());
     }
     // A frame that went away, or lost its fields, has no plan — even while a
@@ -86,7 +93,7 @@ export function useFillPlan(state: PanelState) {
 
     for (const [frameId, frame] of state.frames) {
       if (frame.fields.length === 0) continue;
-      const key = JSON.stringify([frame.url, frame.atsId, frame.fields]);
+      const key = JSON.stringify([frame.documentId, frame.url, frame.atsId, frame.fields, mappingKey, resume]);
       if (resolveKeys.current.get(frameId)?.key === key) continue;
       const token = Symbol();
       resolveKeys.current.set(frameId, { key, token });
@@ -95,8 +102,9 @@ export function useFillPlan(state: PanelState) {
       setPlans((prev) => {
         const next = new Map(prev);
         next.set(frameId, {
-          rows: [],
-          unmatched: [],
+          rows: prev.get(frameId)?.documentId === frame.documentId ? prev.get(frameId)!.rows : [],
+          unmatched: prev.get(frameId)?.documentId === frame.documentId ? prev.get(frameId)!.unmatched : [],
+          documentId: frame.documentId,
           resolving: true,
           llmCalls: 0,
         });
@@ -118,22 +126,39 @@ export function useFillPlan(state: PanelState) {
           if (!isCurrent()) return;
           setPlans((prev) => {
             const next = new Map(prev);
-            next.set(frameId, { ...outcome, resolving: false });
+            const overrides = manual.current.get(frameId);
+            const applyManual = (row: ReviewRow) => {
+              const saved = overrides?.get(row.field.fieldId);
+              return saved?.documentId === frame.documentId && saved.signature === row.field.signature ? { ...saved.row, field: row.field } : row;
+            };
+            const promoted = outcome.unmatched.filter((field) => {
+              const saved = overrides?.get(field.fieldId);
+              return saved?.documentId === frame.documentId && saved.signature === field.signature;
+            });
+            next.set(frameId, { ...outcome, documentId: frame.documentId, rows: [...outcome.rows.map(applyManual), ...promoted.map((field) => applyManual(unmatchedRow(field)))],
+              unmatched: outcome.unmatched.filter((field) => !promoted.includes(field)), resolving: false });
             return next;
           });
-          await recordUnmatched(frame.atsId, frame.url, outcome.unmatched);
+          await recordUnmatched(frame.atsId, frame.url, outcome.unmatched).catch((error) => {
+            if (!isCurrent()) return;
+            setPlans((prev) => {
+              const next = new Map(prev); const current = next.get(frameId);
+              if (current) next.set(frameId, { ...current, error: `The fill plan is ready, but unmatched fields could not be logged: ${String(error)}` });
+              return next;
+            });
+          });
         })
         .catch((err) => {
           if (!isCurrent()) return;
           console.error('[jobpilot] resolve failed', err);
           setPlans((prev) => {
             const next = new Map(prev);
-            next.set(frameId, { rows: [], unmatched: [], resolving: false, llmCalls: 0 });
+            next.set(frameId, { rows: [], unmatched: [], documentId: frame.documentId, resolving: false, llmCalls: 0, error: `Could not match fields: ${String(err)}` });
             return next;
           });
         });
     }
-  }, [state.tabId, state.frames, profile, settings, resume]);
+  }, [state.tabId, state.frames, profileKey, mappingKey, resume]);
 
   const mutateRow = useCallback(
     (frameId: number, fieldId: string, mutate: (row: ReviewRow) => ReviewRow) => {
@@ -142,10 +167,17 @@ export function useFillPlan(state: PanelState) {
         if (!plan) return prev;
         const unmatched = plan.unmatched.find((field) => field.fieldId === fieldId);
         const promoted = unmatched ? unmatchedRow(unmatched) : null;
+        const apply = (row: ReviewRow) => {
+          const changed = mutate(row);
+          const overrides = manual.current.get(frameId) ?? new Map();
+          overrides.set(fieldId, { documentId: plan.documentId, signature: row.field.signature, row: changed });
+          manual.current.set(frameId, overrides);
+          return changed;
+        };
         const next = new Map(prev);
         next.set(frameId, {
           ...plan,
-          rows: promoted ? [...plan.rows, mutate(promoted)] : plan.rows.map((row) => (row.field.fieldId === fieldId ? mutate(row) : row)),
+          rows: promoted ? [...plan.rows, apply(promoted)] : plan.rows.map((row) => (row.field.fieldId === fieldId ? apply(row) : row)),
           unmatched: plan.unmatched.filter((field) => field.fieldId !== fieldId),
         });
         return next;
@@ -192,13 +224,17 @@ export function useFillPlan(state: PanelState) {
       if (field) {
         void cacheSet([
           { signature: field.signature, entry: { kind, confidence: 1, source: 'user-correction' } },
-        ]);
+        ]).catch((error) => setPlans((prev) => {
+          const next = new Map(prev); const current = next.get(frameId);
+          if (current) next.set(frameId, { ...current, error: `The correction works for this page but could not be remembered: ${String(error)}` });
+          return next;
+        }));
       }
     },
     [mutateRow, profile, resume, plans],
   );
 
-  return { profile, settings, resume: resume ?? null, plans, toggleInclude, editValue, editKind };
+  return { profile, snapshot, settings, resume: resume ?? null, plans, toggleInclude, editValue, editKind };
 }
 
 /**

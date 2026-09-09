@@ -1,5 +1,6 @@
 import { browser } from '#imports';
 import type { FieldKind } from '../schema/fieldKind';
+import { withStorageWrite } from './coordination';
 
 export interface MappingEntry {
   kind: FieldKind;
@@ -16,14 +17,8 @@ const MAX_ENTRIES = 2000;
 
 type CacheShape = Record<string, MappingEntry>;
 
-let pending: Promise<unknown> = Promise.resolve();
-
 async function withCacheLock<T>(operation: () => Promise<T>): Promise<T> {
-  if (globalThis.navigator?.locks) return await navigator.locks.request(MAPPING_CACHE_KEY, operation);
-  // Also serialize callers in environments without the Web Locks API.
-  const result = pending.then(operation, operation);
-  pending = result.then(() => undefined, () => undefined);
-  return result;
+  return withStorageWrite(operation);
 }
 
 async function readAll(): Promise<CacheShape> {

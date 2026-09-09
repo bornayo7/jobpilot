@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useProfile, useSettings } from '@hooks/useStores';
 import {
   deleteJob,
   dueFollowUps,
   listJobs,
-  updateJob,
+  patchJob,
   type JobStatus,
   type TrackerJob,
 } from '@lib/tracker/store';
 import { buildFollowUpPrompt } from '@lib/prompts/promptStudio/builders';
+import { useCollection } from './useCollection';
 
 const STATUSES: { value: JobStatus; label: string }[] = [
   { value: 'applied', label: 'Applied' },
@@ -24,16 +25,16 @@ const STATUSES: { value: JobStatus; label: string }[] = [
  * Follow-up/thank-you drafts go through the Prompt Studio copy-paste flow.
  */
 export function TrackerTab({ active = true }: { active?: boolean }) {
-  const [jobs, setJobs] = useState<TrackerJob[]>([]);
+  const { items: jobs, loading, error: loadError, refresh } = useCollection(listJobs);
+  const [error, setError] = useState('');
   const { profile } = useProfile();
   const { settings } = useSettings();
   const [copiedId, setCopiedId] = useState('');
 
-  const refresh = () => void listJobs().then(setJobs);
   // The tab stays mounted while hidden; reload when it comes into view so
   // applications recorded meanwhile show up.
   useEffect(() => {
-    if (active) refresh();
+    if (active) void refresh();
   }, [active]);
 
   const due = dueFollowUps(jobs);
@@ -46,14 +47,17 @@ export function TrackerTab({ active = true }: { active?: boolean }) {
       settings.promptStyle,
       variant,
     );
-    await navigator.clipboard.writeText(prompt);
-    setCopiedId(`${job.id}:${variant}`);
-    setTimeout(() => setCopiedId(''), 1800);
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopiedId(`${job.id}:${variant}`);
+      setTimeout(() => setCopiedId(''), 1800);
+    } catch (err) { setError(`Prompt could not be copied. ${String(err)}`); }
   };
 
-  const patch = async (job: TrackerJob, changes: Partial<TrackerJob>) => {
-    await updateJob({ ...job, ...changes });
-    refresh();
+  const patch = async (job: TrackerJob, changes: Partial<TrackerJob>, base: Partial<TrackerJob> = job) => {
+    setError('');
+    try { await patchJob(job.id, changes, base); await refresh(); return true; }
+    catch (err) { setError(`Application was not updated. ${String(err)}`); return false; }
   };
 
   if (jobs.length === 0) {
@@ -62,14 +66,16 @@ export function TrackerTab({ active = true }: { active?: boolean }) {
         <h2>Job tracker</h2>
         <p>
           Applications are captured automatically when you click Submit and the site confirms.
-          Nothing here yet — go apply to something.
+          {loading ? 'Loading applications…' : 'Your confirmed applications will appear here.'}
         </p>
+        {(error || loadError) && <div role="alert">{error || loadError}<button onClick={() => void refresh()}>Retry</button></div>}
       </div>
     );
   }
 
   return (
     <div className="tracker-tab">
+      {(error || loadError) && <div className="warn-box" role="alert">{error || loadError}<button onClick={() => void refresh()}>Refresh applications</button></div>}
       {due.length > 0 && (
         <>
           <div className="frame-header">Follow-ups due</div>
@@ -103,10 +109,10 @@ export function TrackerTab({ active = true }: { active?: boolean }) {
                 key={job.id}
                 job={job}
                 copiedId={copiedId}
-                onPatch={(changes) => void patch(job, changes)}
+                onPatch={(changes, base) => patch(job, changes, base)}
                 onDelete={async () => {
-                  await deleteJob(job.id);
-                  refresh();
+                  try { await deleteJob(job.id); await refresh(); }
+                  catch (err) { setError(`Application was not removed. ${String(err)}`); }
                 }}
                 onDraft={(variant) => void copyDraft(job, variant)}
               />
@@ -131,11 +137,15 @@ function JobCard({
 }: {
   job: TrackerJob;
   copiedId: string;
-  onPatch: (changes: Partial<TrackerJob>) => void;
+  onPatch: (changes: Partial<TrackerJob>, base?: Partial<TrackerJob>) => Promise<boolean>;
   onDelete: () => void;
   onDraft: (variant: 'followUp' | 'thankYou') => void;
 }) {
   const [notes, setNotes] = useState(job.notes);
+  const [dirty, setDirty] = useState(false);
+  const baseNotes = useRef(job.notes);
+  const edit = useRef(0);
+  useEffect(() => { if (!dirty) setNotes(job.notes); }, [job.notes, dirty]);
 
   return (
     <div className="review-row" style={{ marginBottom: 8 }}>
@@ -150,24 +160,29 @@ function JobCard({
           </span>
         </div>
         <div className="field-meta">
-          <select value={job.status} onChange={(e) => onPatch({ status: e.target.value as JobStatus })}>
+          <select aria-label={`Status for ${job.company} ${job.title}`} value={job.status} onChange={(e) => void onPatch({ status: e.target.value as JobStatus })}>
             {STATUSES.map((status) => (
               <option key={status.value} value={status.value}>
                 {status.label}
               </option>
             ))}
           </select>
-          <button className="entry-remove" onClick={onDelete}>✕</button>
+          <button className="entry-remove" aria-label={`Delete application to ${job.company}`} onClick={onDelete}>Delete</button>
         </div>
       </div>
       <textarea
+        aria-label={`Notes for ${job.company} ${job.title}`}
         className="paste-area"
         rows={1}
         placeholder="Notes (interviewers, next steps…)"
         value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        onBlur={() => {
-          if (notes !== job.notes) onPatch({ notes });
+        onChange={(e) => { if (!dirty) baseNotes.current = job.notes; edit.current++; setNotes(e.target.value); setDirty(true); }}
+        onBlur={async () => {
+          const revision = edit.current;
+          if (dirty && await onPatch({ notes }, { notes: baseNotes.current })) {
+            baseNotes.current = notes;
+            if (edit.current === revision) setDirty(false);
+          }
         }}
       />
       <div className="copy-row">

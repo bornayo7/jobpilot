@@ -1,6 +1,7 @@
 import { Document, Font, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { ResumeVersion } from '../schema/resumeVersion';
 import { renderPdfToBytes } from './renderToBytes';
+import { wrapPdfText } from './pdfText';
 
 // ATS rule: no soft hyphens in the text layer — parsers extract them as
 // garbage characters mid-word.
@@ -34,20 +35,18 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   entry: { marginBottom: 7 },
-  entryHead: { flexDirection: 'row', justifyContent: 'space-between' },
+  entryHead: { marginBottom: 2 },
   entryTitle: { fontFamily: 'Helvetica-Bold' },
   entryMeta: { color: '#333333' },
-  entrySub: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
-  bulletRow: { flexDirection: 'row', marginBottom: 1.5 },
-  bulletGlyph: { width: 10 },
-  bulletText: { flex: 1 },
+  entrySub: { marginBottom: 2 },
+  bullet: { marginLeft: 10, textIndent: -10, marginBottom: 1.5 },
   summary: { marginBottom: 2 },
   skillLine: { marginBottom: 2 },
 });
 
 export function ResumePdf({ version }: { version: ResumeVersion }) {
   const { basics } = version;
-  const contact = [basics.location, basics.email, basics.phone, ...basics.links]
+  const contact = [basics.location, basics.email, basics.phone]
     .filter(Boolean)
     .join('  |  ');
 
@@ -55,28 +54,29 @@ export function ResumePdf({ version }: { version: ResumeVersion }) {
     <Document title={`${basics.name} resume`} author={basics.name}>
       <Page size="LETTER" style={styles.page}>
         {/* Contact info in the BODY — headers/footers are invisible to many ATS parsers. */}
-        <Text style={styles.name}>{basics.name}</Text>
-        {contact ? <Text style={styles.contactLine}>{contact}</Text> : null}
+        <Text style={styles.name}>{wrapPdfText(basics.name, 26)}</Text>
+        {contact ? <Text style={styles.contactLine}>{wrapPdfText(contact)}</Text> : null}
+        {basics.links.map((link, index) => <Text key={index} style={styles.contactLine}>{wrapPdfText(link)}</Text>)}
 
         {version.summary ? (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Summary</Text>
-            <Text style={styles.summary}>{version.summary}</Text>
+            <Text style={styles.sectionTitle} minPresenceAhead={28}>Summary</Text>
+            <Text style={styles.summary}>{wrapPdfText(version.summary)}</Text>
           </View>
         ) : null}
 
         {version.experience.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Work Experience</Text>
+            <Text style={styles.sectionTitle} minPresenceAhead={50}>Work Experience</Text>
             {version.experience.map((entry, i) => (
-              <View key={i} style={styles.entry} wrap={false}>
+              <View key={i} style={styles.entry}>
                 <View style={styles.entryHead}>
-                  <Text style={styles.entryTitle}>{entry.title}</Text>
-                  <Text style={styles.entryMeta}>{entry.dates}</Text>
+                  <Text style={styles.entryTitle} minPresenceAhead={28}>{wrapPdfText(entry.title)}</Text>
+                  <Text style={styles.entryMeta}>{wrapPdfText(entry.dates)}</Text>
                 </View>
                 <View style={styles.entrySub}>
-                  <Text>{entry.company}</Text>
-                  <Text style={styles.entryMeta}>{entry.location}</Text>
+                  <Text>{wrapPdfText(entry.company)}</Text>
+                  <Text style={styles.entryMeta}>{wrapPdfText(entry.location)}</Text>
                 </View>
                 {entry.bullets.map((bullet, j) => (
                   <Bullet key={j} text={bullet} />
@@ -88,14 +88,14 @@ export function ResumePdf({ version }: { version: ResumeVersion }) {
 
         {version.projects.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Projects</Text>
+            <Text style={styles.sectionTitle} minPresenceAhead={50}>Projects</Text>
             {version.projects.map((project, i) => (
-              <View key={i} style={styles.entry} wrap={false}>
+              <View key={i} style={styles.entry}>
                 <View style={styles.entryHead}>
-                  <Text style={styles.entryTitle}>{project.name}</Text>
-                  <Text style={styles.entryMeta}>{project.tech}</Text>
+                  <Text style={styles.entryTitle} minPresenceAhead={28}>{wrapPdfText(project.name)}</Text>
+                  <Text style={styles.entryMeta}>{wrapPdfText(project.tech)}</Text>
                 </View>
-                {project.url ? <Text style={styles.entryMeta}>{project.url}</Text> : null}
+                {project.url ? <Text style={styles.entryMeta}>{wrapPdfText(project.url)}</Text> : null}
                 {project.bullets.map((bullet, j) => (
                   <Bullet key={j} text={bullet} />
                 ))}
@@ -106,14 +106,14 @@ export function ResumePdf({ version }: { version: ResumeVersion }) {
 
         {version.education.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Education</Text>
+            <Text style={styles.sectionTitle} minPresenceAhead={50}>Education</Text>
             {version.education.map((entry, i) => (
-              <View key={i} style={styles.entry} wrap={false}>
+              <View key={i} style={styles.entry}>
                 <View style={styles.entryHead}>
-                  <Text style={styles.entryTitle}>{entry.school}</Text>
-                  <Text style={styles.entryMeta}>{entry.dates}</Text>
+                  <Text style={styles.entryTitle} minPresenceAhead={28}>{wrapPdfText(entry.school)}</Text>
+                  <Text style={styles.entryMeta}>{wrapPdfText(entry.dates)}</Text>
                 </View>
-                <Text>{[entry.degree, entry.details].filter(Boolean).join('  ·  ')}</Text>
+                <Text>{wrapPdfText([entry.degree, entry.details].filter(Boolean).join('  ·  '))}</Text>
               </View>
             ))}
           </View>
@@ -121,11 +121,10 @@ export function ResumePdf({ version }: { version: ResumeVersion }) {
 
         {version.skills.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Skills</Text>
+            <Text style={styles.sectionTitle} minPresenceAhead={28}>Skills</Text>
             {version.skills.map((group, i) => (
               <Text key={i} style={styles.skillLine}>
-                {group.category ? `${group.category}: ` : ''}
-                {group.items.join(', ')}
+                {wrapPdfText(`${group.category ? `${group.category}: ` : ''}${group.items.join(', ')}`)}
               </Text>
             ))}
           </View>
@@ -136,12 +135,9 @@ export function ResumePdf({ version }: { version: ResumeVersion }) {
 }
 
 function Bullet({ text }: { text: string }) {
-  return (
-    <View style={styles.bulletRow}>
-      <Text style={styles.bulletGlyph}>•</Text>
-      <Text style={styles.bulletText}>{text}</Text>
-    </View>
-  );
+  // A single text flow can split across pages without shrinking its container
+  // or leaving a separate bullet glyph stranded on the previous page.
+  return <Text style={styles.bullet}>{`•  ${wrapPdfText(text)}`}</Text>;
 }
 
 export function renderResumePdf(version: ResumeVersion): Promise<ArrayBuffer> {

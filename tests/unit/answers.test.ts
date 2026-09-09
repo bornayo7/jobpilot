@@ -8,6 +8,7 @@ function record(partial: Partial<AnswerRecord> & Pick<AnswerRecord, 'id' | 'ques
     jobId: '',
     company: '',
     reusable: true,
+    reuseConfirmed: true,
     createdAt: 0,
     ...partial,
   };
@@ -53,5 +54,17 @@ describe('rankAnswers', () => {
   it('same-job answers qualify even when non-reusable', () => {
     const suggestions = rankAnswers('Why do you want to work here?', bank, 'job-b');
     expect(suggestions.map((s) => s.record.id)).toContain('b');
+  });
+
+  it('requires fresh confirmation before reusing legacy automatically captured answers', () => {
+    const legacy = record({ id: 'legacy', questionRaw: 'Why this role?', answer: 'Private context', reuseConfirmed: undefined });
+    expect(rankAnswers('Why this role?', [legacy], '')).toEqual([]);
+    expect(rankAnswers('Why this role?', [{...legacy, reuseConfirmed:true}], '')).toHaveLength(1);
+  });
+
+  it('suggests an application-only answer on the same canonical application', () => {
+    const saved = record({ id:'scoped',questionRaw:'Why this role?',answer:'Specific answer',reusable:false,applicationId:'lever:acme:1' });
+    expect(rankAnswers('Why this role?', [saved], 'lever:acme:1')).toHaveLength(1);
+    expect(rankAnswers('Why this role?', [saved], 'lever:other:2')).toEqual([]);
   });
 });

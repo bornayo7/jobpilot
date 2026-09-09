@@ -1,4 +1,4 @@
-import { getDb } from './db';
+import { withStorageWrite } from './coordination';
 import type { FormFieldDescriptor } from '../messaging/protocol';
 
 /**
@@ -14,7 +14,7 @@ export async function recordUnmatched(
 ): Promise<void> {
   if (fields.length === 0) return;
   try {
-    const db = await getDb();
+    await withStorageWrite(async (db) => {
     const tx = db.transaction('unmatchedLog', 'readwrite');
     for (const field of fields) {
       await tx.store.put({
@@ -28,6 +28,7 @@ export async function recordUnmatched(
       });
     }
     await tx.done;
+    });
   } catch (err) {
     console.warn('[jobpilot] unmatched log write failed', err);
   }

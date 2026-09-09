@@ -2,6 +2,7 @@ import type { CapturedAnswer } from '../messaging/protocol';
 import { deepQuerySelectorAll } from './dom/deepQuery';
 import { labelFor } from './dom/labelFor';
 import { FIELD_ID_ATTR } from './discovery';
+import { isUnavailable } from './dom/isUnavailable';
 
 const QUESTION_LABEL = /\?|^(why|what|how|describe|tell us|tell me|explain|share)\b/i;
 
@@ -18,6 +19,7 @@ export function captureAnswers(root: ParentNode = document): CapturedAnswer[] {
     `textarea, input[type="text"], input:not([type]), [contenteditable="true"][${FIELD_ID_ATTR}]`,
     root,
   )) {
+    if (isUnavailable(el) || el.closest('[hidden], [aria-hidden="true"]')) continue;
     const value = valueOf(el).trim();
     if (!value) continue;
 
@@ -31,7 +33,8 @@ export function captureAnswers(root: ParentNode = document): CapturedAnswer[] {
     const key = `${label}::${value.slice(0, 40)}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    answers.push({ label: label.slice(0, 300), value: value.slice(0, 5000) });
+    answers.push({ label: label.slice(0, 300), value: value.slice(0, 5000),
+      sensitive: /disabilit|accommodation|criminal|convict|race|ethnic|gender|veteran|medical|health|religion|sexual|citizen|visa|sponsor/i.test(label) });
     if (answers.length >= 20) break;
   }
   return answers;

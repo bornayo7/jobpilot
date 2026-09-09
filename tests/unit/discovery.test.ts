@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { discoverFields, fieldIdAt } from '@lib/fill/discovery';
+import { discoverFields, fieldIdAt, findByFieldId } from '@lib/fill/discovery';
 
 describe('discoverFields', () => {
   beforeEach(() => {
@@ -47,6 +47,15 @@ describe('discoverFields', () => {
     const [a] = discoverFields(null);
     const [b] = discoverFields(null);
     expect(a!.fieldId).toBe(b!.fieldId);
+  });
+
+  it('never transfers an element identity to cloned replacement markup', () => {
+    document.body.innerHTML = '<label>Name<input name="name" /></label>';
+    const [old] = discoverFields(null); const input = document.querySelector('input')!;
+    const clone = input.cloneNode(true); input.replaceWith(clone);
+    expect(findByFieldId(old!.fieldId)).toBeNull();
+    const [replacement] = discoverFields(null);
+    expect(replacement!.fieldId).not.toBe(old!.fieldId);
   });
 
   it('skips disabled, read-only and password controls and unavailable options', () => {

@@ -1,84 +1,101 @@
 import { browser } from '#imports';
 import type { Browser } from 'wxt/browser';
-import { CS_PORT, type BgToCs, type CsToBg } from '@lib/messaging/protocol';
-import { detectAts } from '@lib/fill/adapters/detect';
-import { discoverFields, observeFields, fieldIdAt, findByFieldId } from '@lib/fill/discovery';
-import { flashField } from '@lib/fill/dom/highlight';
-import { executeInstructions } from '@lib/fill/executor';
-import { captureAnswers } from '@lib/fill/captureAnswers';
-import { looksLikeConfirmation, looksLikeSubmitButton } from '@lib/tracker/detect';
+import { CS_PORT, type BgToCs, type CsEvent, type CsToBg, type FillProvenance } from '../messaging/protocol';
+import { detectAts } from '../fill/adapters/detect';
+import { discoverFields, observeFields, fieldIdAt, findByFieldId } from '../fill/discovery';
+import { flashField } from '../fill/dom/highlight';
+import { executeInstructions } from '../fill/executor';
+import { captureAnswers } from '../fill/captureAnswers';
+import { labelFor } from '../fill/dom/labelFor';
+import { retainedAttachment } from '../fill/dom/attachFile';
+import { deepQuerySelectorAll } from '../fill/dom/deepQuery';
+import { looksLikeConfirmation, looksLikeSubmitButton } from '../tracker/detect';
 
-/** Shared runtime for ATS and LinkedIn declarations. */
-export function startContentRuntime() {
-  const atsId = detectAts(location.host, location.pathname);
+/** One isolated-world runtime, shared by static and user-enabled declarations. */
+export function startContentRuntime(): () => void {
+  const globals = globalThis as typeof globalThis & { __jobpilotDispose?: () => void };
+  globals.__jobpilotDispose?.();
+  let disposed = false;
   let port: Browser.runtime.Port | null = null;
   let stopObserving: (() => void) | null = null;
-  let confirmationSent = false;
-  let lastContextTarget: Element | null = null;
-  /** URL (minus hash) last reported to the hub. SPAs change it without a
-   *  reload, so it is re-checked on every scan. */
+  let documentId: string = crypto.randomUUID();
   let announcedUrl = '';
-
-  const post = (msg: CsToBg) => {
-    try {
-      port?.postMessage(msg);
-    } catch {
-      // Port died mid-send; reconnect loop below handles it.
-    }
+  let previousControls: HTMLElement[] = [];
+  let lastContextTarget: Element | null = null;
+  let provenance: FillProvenance | undefined;
+  let resumeAttachment: { input: HTMLInputElement; file: File; versionId?: string } | undefined;
+  let active: { id: string; controller: AbortController } | null = null;
+  let confirmationSent = false;
+  const listeners = new AbortController();
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  const later = (callback: () => void, delay: number) => {
+    const timer = setTimeout(() => { timers.delete(timer); if (!disposed) callback(); }, delay);
+    timers.add(timer); return timer;
   };
-
+  const post = (event: CsEvent, id = documentId) => {
+    try { port?.postMessage({ ...event, documentId: id } satisfies CsToBg); }
+    catch { /* reconnect repopulates page state */ }
+  };
   const pageUrl = () => location.href.replace(/#.*$/, '');
-
   const announce = () => {
     announcedUrl = pageUrl();
-    post({ t: 'cs/ready', atsId, url: location.href });
+    post({ t: 'cs/ready', atsId: detectAts(location.host, location.pathname), url: location.href });
   };
-
+  const invalidate = () => {
+    active?.controller.abort(); documentId = crypto.randomUUID();
+    provenance = undefined; resumeAttachment = undefined; confirmationSent = false; announce();
+  };
   const checkConfirmation = () => {
     if (confirmationSent) return;
-    const bodyText = document.body?.innerText ?? '';
-    if (looksLikeConfirmation(location.href, bodyText)) {
-      confirmationSent = true;
-      post({
-        t: 'cs/submitDetected',
-        url: location.href,
-        title: document.title,
-        confirmationText: bodyText.slice(0, 300),
-      });
-    }
+    const text = document.body?.innerText ?? '';
+    if (!looksLikeConfirmation(location.href, text)) return;
+    confirmationSent = true;
+    post({ t: 'cs/submitDetected', url: location.href, title: document.title, confirmationText: text.slice(0, 6000) });
   };
-
   const scanAndReport = () => {
-    if (pageUrl() !== announcedUrl) {
-      // Client-side navigation. To the panel this is a new page: the JD
-      // text and fill results belonged to the old one, and a second
-      // application in the same tab needs its own confirmation.
-      confirmationSent = false;
-      announce();
-    }
-    const fields = discoverFields(atsId);
-    post({ t: 'cs/fields', fields });
-    checkConfirmation();
+    const fields = discoverFields(detectAts(location.host, location.pathname));
+    const controls = fields.map((f) => findByFieldId(f.fieldId)).filter((el): el is HTMLElement => !!el);
+    const replaced = previousControls.length > 0 && !previousControls.some((el) => controls.includes(el));
+    if (pageUrl() !== announcedUrl || replaced) invalidate();
+    previousControls = controls; post({ t: 'cs/fields', fields }); checkConfirmation();
   };
-
   const handleMessage = async (raw: unknown) => {
     const msg = raw as BgToCs;
     switch (msg.t) {
-      case 'bg/scan':
-        scanAndReport();
+      case 'bg/scan': scanAndReport(); break;
+      case 'bg/cancel':
+        if (msg.documentId === documentId && active?.id === msg.runId) active.controller.abort();
         break;
       case 'bg/execute': {
-        const results = await executeInstructions(msg.instructions, msg.files ?? []);
-        post({ t: 'cs/fillResults', results });
-        // Filling often triggers re-renders; refresh the panel's view.
         scanAndReport();
+        if (msg.documentId !== documentId || active) {
+          post({ t: 'cs/fillResults', runId: msg.runId, results: msg.instructions.map((i) => ({ fieldId: i.fieldId, ok: false, error: active ? 'Another fill is running' : 'The application page changed' })) }, msg.documentId);
+          break;
+        }
+        const run = { id: msg.runId, controller: new AbortController() }; active = run;
+        try {
+          const results = await executeInstructions(msg.instructions, msg.files ?? [], run.controller.signal);
+          if (msg.documentId === documentId && results.some((r) => r.ok)) {
+            provenance = { profileId: msg.provenance?.profileId, profileRevision: msg.provenance?.profileRevision };
+            for (const instruction of msg.instructions) {
+              if (instruction.kind !== 'docs.resume' || instruction.action !== 'attachFile' || !results.some((r) => r.fieldId === instruction.fieldId && r.ok)) continue;
+              const input = findByFieldId(instruction.fieldId);
+              const file = input instanceof HTMLInputElement ? retainedAttachment(input) : undefined;
+              if (input instanceof HTMLInputElement && file) {
+                resumeAttachment = { input, file, versionId: file.name === msg.provenance?.resumeName ? msg.provenance?.resumeVersionId : undefined };
+              }
+            }
+          }
+          post({ t: 'cs/fillResults', runId: msg.runId, results }, msg.documentId);
+        } catch (error) {
+          post({ t: 'cs/fillResults', runId: msg.runId, results: msg.instructions.map((i) => ({ fieldId: i.fieldId, ok: false, error: String(error) })) }, msg.documentId);
+        } finally {
+          if (active === run) active = null;
+          scanAndReport();
+        }
         break;
       }
-      case 'bg/highlight': {
-        const el = findByFieldId(msg.fieldId);
-        if (el) flashField(el);
-        break;
-      }
+      case 'bg/highlight': { const el = findByFieldId(msg.fieldId); if (el) flashField(el); break; }
       case 'bg/identifyContext': {
         const fieldId = lastContextTarget ? fieldIdAt(lastContextTarget) : null;
         if (fieldId) post({ t: 'cs/contextField', fieldId });
@@ -86,96 +103,62 @@ export function startContentRuntime() {
       }
       case 'bg/extractJd': {
         const main = document.querySelector<HTMLElement>('main, [role="main"], article');
-        const text = (main ?? document.body)?.innerText ?? '';
-        post({ t: 'cs/jdText', text: text.slice(0, 60_000), title: document.title });
+        post({ t: 'cs/jdText', text: ((main ?? document.body)?.innerText ?? '').slice(0, 60_000), title: document.title });
         break;
       }
     }
   };
-
-  // Snapshot answers the moment a submit-looking control is activated â€” the
-  // form is unreachable once navigation starts.
-  document.addEventListener(
-    'click',
-    (event) => {
-      const target = event.target as Element | null;
-      const control = target?.closest<HTMLElement>('button, input[type="submit"], [role="button"]');
-      if (!control) return;
-      const text =
-        control.textContent?.trim() ||
-        (control as HTMLInputElement).value?.trim?.() ||
-        control.getAttribute('aria-label') ||
-        '';
-      if (!looksLikeSubmitButton(text)) return;
-      post({
-        t: 'cs/submitAttempt',
-        url: location.href,
-        title: document.title,
-        answers: captureAnswers(),
-      });
-      // Confirmation may render without a DOM burst; check again shortly.
-      setTimeout(checkConfirmation, 2500);
-      setTimeout(checkConfirmation, 6000);
-    },
-    true,
-  );
-
-  // Track what the user right-clicked so "fix this field's mapping" can
-  // resolve it â€” Chrome's context-menu API never identifies the element.
-  document.addEventListener(
-    'contextmenu',
-    (event) => {
-      lastContextTarget = event.target as Element | null;
-    },
-    true,
-  );
-
-  // A service-worker restart is transient and reconnects immediately. An
-  // extension reload/uninstall invalidates this context permanently: connect()
-  // then throws on every call, so back off and give up rather than spinning at
-  // 500ms forever on a page the user is still reading.
-  const RECONNECT_DELAYS_MS = [500, 1_000, 2_000, 5_000, 10_000];
-  // A connection only counts as healthy once it has stayed up this long.
-  // connect() can succeed synchronously and then disconnect a moment later
-  // (worker failing to start, extension mid-update); resetting the backoff
-  // on connect alone turned that into a 500ms loop with no exit.
-  const STABLE_AFTER_MS = 5_000;
-  let reconnectAttempt = 0;
-  let stableTimer: ReturnType<typeof setTimeout> | undefined;
-
-  const scheduleReconnect = () => {
-    const delay = RECONNECT_DELAYS_MS[reconnectAttempt];
-    if (delay === undefined) return; // context gone for good
-    reconnectAttempt += 1;
-    setTimeout(connect, delay);
+  const snapshotAttempt = (root: ParentNode) => {
+    const inputs = deepQuerySelectorAll<HTMLInputElement>('input[type="file"]', root);
+    const attached = resumeAttachment && inputs.includes(resumeAttachment.input) && retainedAttachment(resumeAttachment.input) === resumeAttachment.file ? resumeAttachment : undefined;
+    const resume = attached?.file ?? inputs
+      .filter((el) => /resume|\bcv\b|curriculum vitae/i.test(`${labelFor(el)} ${el.name}`))
+      .flatMap((el) => [...(el.files ?? [])]).find((file) => /\.(pdf|docx?)$/i.test(file.name));
+    post({ t: 'cs/submitAttempt', url: location.href, title: document.title, answers: captureAnswers(root),
+      provenance: { ...provenance, resumeName: resume?.name, resumeVersionId: attached?.versionId } });
+    later(checkConfirmation, 1200); later(checkConfirmation, 4000);
   };
-
-  function connect(): void {
-    try {
-      port = browser.runtime.connect({ name: CS_PORT });
-    } catch {
-      // "Extension context invalidated" â€” the old content script is orphaned.
-      port = null;
-      scheduleReconnect();
-      return;
-    }
-    port.onMessage.addListener(handleMessage);
-    port.onDisconnect.addListener(() => {
-      clearTimeout(stableTimer);
-      port = null;
-      stopObserving?.();
-      stopObserving = null;
-      scheduleReconnect();
+  document.addEventListener('submit', (event) => {
+    if (event.target instanceof HTMLFormElement) snapshotAttempt(event.target);
+  }, { capture: true, signal: listeners.signal });
+  document.addEventListener('click', (event) => {
+    const target = event.composedPath().find((node): node is Element => node instanceof Element);
+    const control = target?.closest<HTMLElement>('button, input[type="submit"], [role="button"]');
+    if (!control || !looksLikeSubmitButton(control.textContent?.trim() || (control as HTMLInputElement).value || control.getAttribute('aria-label') || '')) return;
+    const form = control.closest('form');
+    if (form || control.getAttribute('type') === 'submit' || /submit|send|finish/i.test(control.textContent ?? '')) snapshotAttempt(form ?? document);
+  }, { capture: true, signal: listeners.signal });
+  document.addEventListener('contextmenu', (event) => {
+    lastContextTarget = event.composedPath().find((node): node is Element => node instanceof Element) ?? null;
+  }, { capture: true, signal: listeners.signal });
+  let reconnectAttempt = 0;
+  const reconnectDelays = [500, 1000, 2000, 5000, 10000];
+  let stableTimer: ReturnType<typeof setTimeout> | undefined;
+  const reconnect = () => { const delay = reconnectDelays[reconnectAttempt++]; if (delay !== undefined) later(connect, delay); };
+  function connect() {
+    if (disposed) return;
+    let connected: Browser.runtime.Port;
+    try { connected = browser.runtime.connect({ name: CS_PORT }); }
+    catch { reconnect(); return; }
+    port = connected; connected.onMessage.addListener(handleMessage);
+    connected.onDisconnect.addListener(() => {
+      if (port !== connected) return;
+      clearTimeout(stableTimer); active?.controller.abort(); port = null;
+      stopObserving?.(); stopObserving = null;
+      if (!disposed) reconnect();
     });
-
-    clearTimeout(stableTimer);
-    stableTimer = setTimeout(() => {
-      reconnectAttempt = 0;
-    }, STABLE_AFTER_MS);
-    announce();
-    scanAndReport();
-    stopObserving = observeFields(scanAndReport);
+    stableTimer = later(() => { reconnectAttempt = 0; }, 5000);
+    announce(); scanAndReport(); stopObserving?.(); stopObserving = observeFields(scanAndReport);
   }
-
-  connect();
+  const navigationTimer = setInterval(() => { if (pageUrl() !== announcedUrl) scanAndReport(); }, 250);
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true; active?.controller.abort(); listeners.abort(); stopObserving?.();
+    for (const timer of timers) clearTimeout(timer);
+    clearInterval(navigationTimer); port?.disconnect(); port = null;
+    if (globals.__jobpilotDispose === dispose) delete globals.__jobpilotDispose;
+  };
+  globals.__jobpilotDispose = dispose;
+  window.addEventListener('pagehide', (event) => { if (!event.persisted) dispose(); }, { signal: listeners.signal });
+  connect(); return dispose;
 }

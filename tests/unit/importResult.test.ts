@@ -51,6 +51,21 @@ describe('extractJsonBlock', () => {
 });
 
 describe('importResumePaste', () => {
+  it.each([
+    ['Built in C++', 'Built in C#'],
+    ['Saved 40%', 'Saved 40'],
+    ['Supported 1.5 million requests', 'Supported 15 million requests'],
+    ['Worked in C', 'Worked in C++'],
+  ])('flags meaningful factual changes: %s -> %s', (original, changed) => {
+    const version = { ...VALID_VERSION, experience: [{ ...VALID_VERSION.experience[0], bullets: [changed] }] };
+    const result = importResumePaste(JSON.stringify(version), profileWithBullet(original));
+    expect(result.ok && result.diff.rewrittenCount).toBe(1);
+  });
+  it('ignores harmless whitespace in bullet comparisons', () => {
+    const version = { ...VALID_VERSION, experience: [{ ...VALID_VERSION.experience[0], bullets: ['Built   tooling\nin C++'] }] };
+    const result = importResumePaste(JSON.stringify(version), profileWithBullet('Built tooling in C++'));
+    expect(result.ok && result.diff.keptCount).toBe(1);
+  });
   it('accepts a chatty paste wrapping a valid fenced block', () => {
     const paste = `Sure — here is the tailored resume:\n\`\`\`json\n${JSON.stringify(VALID_VERSION)}\n\`\`\`\nLet me know if you want changes.`;
     const outcome = importResumePaste(paste, emptyProfile());

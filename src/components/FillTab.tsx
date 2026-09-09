@@ -10,11 +10,20 @@ import { listAnswers, type AnswerRecord } from '@lib/memory/answers';
 import { companyFromUrl } from '@lib/tracker/detect';
 import { findPreviousApplications, listJobs, type TrackerJob } from '@lib/tracker/store';
 import { FramePlanView } from './FramePlanView';
+import { watchCollections } from '@lib/storage/coordination';
+import { applicationId } from '@lib/tracker/applicationId';
+import { enableCurrentSite } from '@lib/content/registerSite';
 
 export function FillTab({ state, actions }: { state: PanelState; actions: PanelActions }) {
-  const { profile, settings, resume, plans, toggleInclude, editValue, editKind } = useFillPlan(state);
+  const { profile, snapshot, settings, resume, plans, toggleInclude, editValue, editKind } = useFillPlan(state);
   const [filling, setFilling] = useState(false);
+  const [runStatus, setRunStatus] = useState('');
+  const activeRun = useRef<AbortController | null>(null);
+  const context = JSON.stringify([state.tabId, [...state.frames].map(([id, frame]) => [id, frame.documentId]), snapshot?.id, snapshot?.revision]);
+  const currentContext = useRef(context); currentContext.current = context;
+  useEffect(() => () => { activeRun.current?.abort(); }, [context]);
   const [enableHint, setEnableHint] = useState('');
+  const [enabling, setEnabling] = useState(false);
   const [answerBank, setAnswerBank] = useState<AnswerRecord[]>([]);
   const [previousApps, setPreviousApps] = useState<TrackerJob[]>([]);
   /** `${tabId}|${url}` the JD was last requested for — once per page, not per tab. */
@@ -27,7 +36,10 @@ export function FillTab({ state, actions }: { state: PanelState; actions: PanelA
   // Reload the bank per page: the tab stays mounted across tab switches now,
   // and answers saved in the Answers tab should suggest on the next form.
   useEffect(() => {
-    void listAnswers().then(setAnswerBank);
+    let disposed = false;
+    const refresh = () => void listAnswers().then((answers) => { if (!disposed) setAnswerBank(answers); }).catch((error) => { if (!disposed) setRunStatus(`Could not load saved answers: ${String(error)}`); });
+    refresh(); const stop = watchCollections(refresh);
+    return () => { disposed = true; stop(); };
   }, [state.tabUrl]);
 
   // Auto-extract the JD once per page: powers dealbreaker warnings here and
@@ -52,7 +64,10 @@ export function FillTab({ state, actions }: { state: PanelState; actions: PanelA
       setPreviousApps([]);
       return;
     }
-    void listJobs().then((jobs) => setPreviousApps(findPreviousApplications(jobs, company)));
+    let disposed = false;
+    const refresh = () => void listJobs().then((jobs) => { if (!disposed) setPreviousApps(findPreviousApplications(jobs, company)); }).catch((error) => { if (!disposed) setRunStatus(`Could not load previous applications: ${String(error)}`); });
+    refresh(); const stop = watchCollections(refresh);
+    return () => { disposed = true; stop(); };
   }, [state.tabUrl]);
 
   // Right-click "fix this field" → scroll the matching row into view.
@@ -82,36 +97,42 @@ export function FillTab({ state, actions }: { state: PanelState; actions: PanelA
   const resolving = [...plans.values()].some((plan) => plan.resolving);
 
   const fillAll = async () => {
+    if (activeRun.current) return;
+    const controller = new AbortController(); activeRun.current = controller;
+    const origin = context;
     setFilling(true);
+    setRunStatus('Preparing reviewed fields…');
     try {
+      const results = [];
       for (const [frameId, plan] of plans) {
         const instructions = plan.rows
           .filter((row) => row.include && row.instruction)
           .map((row) => row.instruction!);
         if (instructions.length === 0) continue;
         const files = await collectFiles(instructions);
-        actions.execute(tabId, frameId, instructions, files);
+        if (controller.signal.aborted || currentContext.current !== origin) throw new Error('Fill cancelled because its application or profile changed');
+        setRunStatus(`Waiting for ${instructions.length} fields to finish…`);
+        results.push(...await actions.execute(tabId, frameId, plan.documentId, instructions, files,
+          { profileId: snapshot?.id, profileRevision: snapshot?.revision, resumeName: resume?.filename, resumeVersionId: resume?.versionId }, controller.signal));
       }
+      const failed = results.filter((result) => !result.ok).length;
+      setRunStatus(`${results.length - failed} fields verified${failed ? `; ${failed} need attention` : ''}. Review the application before submitting.`);
+    } catch (error) {
+      setRunStatus(String(error instanceof Error ? error.message : error));
     } finally {
+      if (activeRun.current === controller) activeRun.current = null;
       setFilling(false);
     }
   };
 
   const enableSite = async () => {
-    // activeTab (granted by opening the panel from the toolbar) exposes the url.
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.url || !/^https?:/.test(tab.url)) {
-      setEnableHint('Open the job page, then click the JobPilot toolbar icon and try again.');
-      return;
-    }
-    const origin = new URL(tab.url).origin;
-    const granted = await browser.permissions.request({ origins: [`${origin}/*`] });
-    if (!granted) {
-      setEnableHint('Permission declined — JobPilot cannot see this site without it.');
-      return;
-    }
-    actions.send({ t: 'panel/registerSite', origin, tabId });
-    setEnableHint(`Enabled on ${origin} — reloading the page…`);
+    setEnabling(true); setEnableHint('Waiting for site permission and registration…');
+    try {
+      const origin = await enableCurrentSite(tabId, actions.registerSite);
+      setEnableHint(`Enabled on ${origin}. The page is reloading.`);
+    } catch (error) {
+      setEnableHint(String(error instanceof Error ? error.message : error));
+    } finally { setEnabling(false); }
   };
 
   return (
@@ -156,8 +177,8 @@ export function FillTab({ state, actions }: { state: PanelState; actions: PanelA
             JobPilot runs automatically on the major ATS platforms (Greenhouse, Lever, Ashby,
             Workday, iCIMS, SmartRecruiters). For a company's own careers site, enable it once:
           </p>
-          <button className="primary" onClick={enableSite}>Enable JobPilot on this site</button>
-          {enableHint && <p className="hint">{enableHint}</p>}
+          <button className="primary" onClick={enableSite} disabled={enabling}>{enabling ? 'Enabling…' : 'Enable JobPilot on this site'}</button>
+          {enableHint && <p className="hint" role="status">{enableHint}</p>}
         </div>
       )}
 
@@ -176,6 +197,8 @@ export function FillTab({ state, actions }: { state: PanelState; actions: PanelA
       )}
 
       {resolving && <div className="hint">Matching fields…</div>}
+      {[...plans.values()].map((plan, index) => plan.error && <p className="warn-box" role="alert" key={index}>{plan.error}</p>)}
+      {(runStatus || state.trackerNotice) && <p className="run-status" role="status">{runStatus || state.trackerNotice}</p>}
 
       {frameEntries.map(([frameId, frame]) => {
         const plan = plans.get(frameId);
@@ -187,6 +210,8 @@ export function FillTab({ state, actions }: { state: PanelState; actions: PanelA
             plan={plan}
             fillResults={state.fillResults}
             answerBank={answerBank}
+            applicationId={applicationId(frame.url) ?? ''}
+            disabled={filling}
             onHover={(fieldId) => actions.highlight(tabId, frameId, fieldId)}
             onToggle={(fieldId) => toggleInclude(frameId, fieldId)}
             onValue={(fieldId, text) => editValue(frameId, fieldId, text)}
@@ -195,11 +220,12 @@ export function FillTab({ state, actions }: { state: PanelState; actions: PanelA
         );
       })}
 
-      {includedCount > 0 && (
+      {(includedCount > 0 || filling) && (
         <div className="save-bar">
           <button className="primary" onClick={fillAll} disabled={filling || resolving}>
             {filling ? 'Filling…' : `Fill ${includedCount} field${includedCount === 1 ? '' : 's'}`}
           </button>
+          {filling && <button onClick={() => activeRun.current?.abort()}>Cancel fill</button>}
           <span className="hint" style={{ alignSelf: 'center' }}>
             You review and click Submit yourself — always.
           </span>
@@ -218,7 +244,8 @@ async function collectFiles(instructions: FillInstruction[]): Promise<Serialized
   const files: SerializedFile[] = [];
   for (const key of blobKeys) {
     const file = await loadDocumentAsFile(key);
-    if (file) files.push(file);
+    if (!file) throw new Error('A selected document was removed. Select a resume and review again.');
+    files.push({ ...file, blobKey: key });
   }
   return files;
 }

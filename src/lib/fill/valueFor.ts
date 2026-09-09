@@ -2,6 +2,7 @@ import type { Profile } from '../schema/profile';
 import { PROFILE_VALUE, SENSITIVE_KINDS, type FieldKind } from '../schema/fieldKind';
 import type { FillPayload, FormFieldDescriptor } from '../messaging/protocol';
 import { containsTokens, normalizeForSignature } from './signature';
+import { interpretBoolean } from './interpretAnswer';
 
 /** A concrete fill for one field, plus whether a human must look at it first. */
 export type ResolvedValue = FillPayload & {
@@ -12,6 +13,7 @@ export type ResolvedValue = FillPayload & {
 export interface ResumeMeta {
   blobId: string;
   filename: string;
+  versionId?: string;
 }
 
 /**
@@ -42,13 +44,15 @@ export function valueFor(
 
   // Boolean-answer kinds against yes/no style widgets.
   if (typeof raw === 'boolean') {
+    const answer = interpretBoolean(kind, field.label || field.ariaLabel || '', raw);
+    if (answer === null) return null;
     if (field.control === 'checkbox') {
-      return { action: 'setChecked', value: raw, requiresReview: sensitive };
+      return { action: 'setChecked', value: answer, requiresReview: sensitive };
     }
     if (field.control === 'select' || field.control === 'combobox' || field.control === 'radio') {
-      return matchOption(field, raw ? 'yes' : 'no', sensitive, raw ? ['yes', 'i am authorized'] : ['no', 'not require']);
+      return matchOption(field, answer ? 'yes' : 'no', sensitive);
     }
-    return { action: 'setText', value: raw ? 'Yes' : 'No', requiresReview: true };
+    return { action: 'setText', value: answer ? 'Yes' : 'No', requiresReview: true };
   }
 
   if (field.control === 'select' || field.control === 'radio') {

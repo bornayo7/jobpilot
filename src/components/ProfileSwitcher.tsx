@@ -5,6 +5,7 @@ import {
   listProfiles,
   renameProfile,
   switchProfile,
+  watchProfileSnapshot,
   type ProfileMeta,
 } from '@lib/storage/profileStore';
 
@@ -15,56 +16,61 @@ import {
  */
 export function ProfileSwitcher() {
   const [profiles, setProfiles] = useState<ProfileMeta[]>([]);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const refresh = () => void listProfiles().then(setProfiles);
-  useEffect(refresh, []);
+  const refresh = () => void listProfiles().then(setProfiles).catch((err) => setError(String(err)));
+  useEffect(() => { refresh(); return watchProfileSnapshot(refresh); }, []);
+  const run = async (operation: () => Promise<unknown>) => {
+    setBusy(true); setError('');
+    try { await operation(); refresh(); }
+    catch (err) { setError(`Profile change failed. ${String(err)}`); }
+    finally { setBusy(false); }
+  };
 
   const active = profiles.find((p) => p.active);
 
   const onSwitch = async (id: string) => {
-    await switchProfile(id);
-    refresh();
+    await run(() => switchProfile(id));
   };
 
   const onCreate = async (duplicate: boolean) => {
     const name = prompt(duplicate ? 'Name for the copy:' : 'Name for the new profile:');
     if (name === null) return;
-    await createProfile(name, duplicate);
-    refresh();
+    await run(() => createProfile(name, duplicate));
   };
 
   const onRename = async () => {
     if (!active) return;
     const name = prompt('New name:', active.name);
     if (name === null) return;
-    await renameProfile(active.id, name);
-    refresh();
+    await run(() => renameProfile(active.id, name));
   };
 
   const onDelete = async () => {
     if (!active || profiles.length <= 1) return;
-    if (!confirm(`Delete profile "${active.name}" and all its data? This cannot be undone.`)) return;
-    await deleteProfile(active.id);
-    refresh();
+    if (!confirm(`Delete saved profile "${active.name}"? This cannot be undone.`)) return;
+    await run(() => deleteProfile(active.id));
   };
 
   return (
     <div className="profile-switcher">
-      <select value={active?.id ?? ''} onChange={(e) => void onSwitch(e.target.value)}>
+      <select aria-label="Active profile" disabled={busy} value={active?.id ?? ''} onChange={(e) => void onSwitch(e.target.value)}>
         {profiles.map((p) => (
           <option key={p.id} value={p.id}>
             {p.name}
           </option>
         ))}
       </select>
-      <button onClick={() => void onCreate(false)} title="New blank profile">+ New</button>
-      <button onClick={() => void onCreate(true)} title="Duplicate current profile">Duplicate</button>
-      <button onClick={() => void onRename()}>Rename</button>
+      <button disabled={busy} onClick={() => void onCreate(false)} title="New blank profile">New</button>
+      <button disabled={busy} onClick={() => void onCreate(true)} title="Duplicate saved profile">Duplicate</button>
+      <button disabled={busy} onClick={() => void onRename()}>Rename</button>
       {profiles.length > 1 && (
-        <button className="entry-remove" onClick={() => void onDelete()}>
+        <button disabled={busy} className="entry-remove" onClick={() => void onDelete()}>
           Delete
         </button>
       )}
+      {error && <span role="alert" className="error-text">{error}</span>}
     </div>
   );
 }

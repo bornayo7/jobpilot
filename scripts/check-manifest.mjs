@@ -6,6 +6,7 @@ const directory = resolve(process.argv[2] ?? '.output/chrome-mv3');
 const manifest = JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8'));
 assert.equal(manifest.manifest_version, 3);
 assert.equal(manifest.background.service_worker, 'background.js');
+assert.equal(manifest.content_security_policy.extension_pages, "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';");
 const scripts = manifest.content_scripts;
 assert.equal(scripts.length, 2, 'ATS and LinkedIn need separate declarations');
 const linkedin = scripts.find((script) => script.matches.includes('https://www.linkedin.com/jobs/*'));

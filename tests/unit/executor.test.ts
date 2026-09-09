@@ -107,4 +107,20 @@ describe('executeInstructions', () => {
     expect(results[0]!.ok).toBe(true);
     expect(document.querySelector('input')!.checked).toBe(true);
   });
+
+  it('reports a framework value revert during the bounded settling window', async () => {
+    document.body.innerHTML = '<label>Name<input name="name" /></label>';
+    const input = document.querySelector('input')!;
+    input.addEventListener('input', () => setTimeout(() => { input.value = ''; }, 150));
+    const [field] = discoverFields(null);
+    const results = await executeInstructions([instruction({fieldId:field!.fieldId,action:'setText',value:'Ada'})]);
+    expect(results[0]).toMatchObject({ok:false,error:'Page did not retain the value'});
+  });
+
+  it('does not write any field after cancellation', async () => {
+    document.body.innerHTML = '<label>Name<input name="name" /></label>';
+    const [field] = discoverFields(null); const controller = new AbortController();controller.abort();
+    const results = await executeInstructions([instruction({fieldId:field!.fieldId,action:'setText',value:'Ada'})],[],controller.signal);
+    expect(results[0]!.ok).toBe(false);expect(document.querySelector('input')!.value).toBe('');
+  });
 });

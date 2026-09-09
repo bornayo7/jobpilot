@@ -3,13 +3,9 @@ import {
   Document,
   Packer,
   Paragraph,
-  Tab,
-  TabStopType,
   TextRun,
 } from 'docx';
 import type { ResumeVersion } from '../schema/resumeVersion';
-
-const PAGE_WIDTH_TWIPS = 12240 - 2 * 1080; // Letter minus 0.75" margins
 
 /**
  * DOCX twin of the PDF, built from the same ResumeVersion JSON so the two can
@@ -24,6 +20,7 @@ export function buildResumeDocx(version: ResumeVersion): Document {
     new Paragraph({
       children: [new TextRun({ text: basics.name, bold: true, size: 38 })],
       spacing: { after: 60 },
+      keepNext: true,
     }),
   );
   const contact = [basics.location, basics.email, basics.phone, ...basics.links].filter(Boolean).join('  |  ');
@@ -32,6 +29,7 @@ export function buildResumeDocx(version: ResumeVersion): Document {
       new Paragraph({
         children: [new TextRun({ text: contact, size: 19, color: '333333' })],
         spacing: { after: 160 },
+        keepNext: true,
       }),
     );
   }
@@ -90,7 +88,7 @@ export function buildResumeDocx(version: ResumeVersion): Document {
     sections: [
       {
         properties: {
-          page: { margin: { top: 1080, bottom: 1080, left: 1080, right: 1080 } },
+          page: { size: { width: 12240, height: 15840 }, margin: { top: 1080, bottom: 1080, left: 1080, right: 1080 } },
         },
         children,
       },
@@ -103,28 +101,29 @@ function sectionHeading(text: string): Paragraph {
     children: [new TextRun({ text: text.toUpperCase(), bold: true, size: 21 })],
     border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '444444' } },
     spacing: { before: 200, after: 100 },
+    keepNext: true,
   });
 }
 
 function headLine(left: string, right: string): Paragraph {
   return new Paragraph({
-    tabStops: [{ type: TabStopType.RIGHT, position: PAGE_WIDTH_TWIPS }],
     children: [
       new TextRun({ text: left, bold: true, size: 20 }),
-      ...(right ? [new TextRun({ children: [new Tab(), right], size: 19, color: '333333' })] : []),
+      ...(right ? [new TextRun({ text: right, break: 1, size: 19, color: '333333' })] : []),
     ],
     spacing: { after: 30 },
+    keepNext: true,
   });
 }
 
 function subLine(left: string, right: string): Paragraph {
   return new Paragraph({
-    tabStops: [{ type: TabStopType.RIGHT, position: PAGE_WIDTH_TWIPS }],
     children: [
       new TextRun({ text: left, size: 20 }),
-      ...(right ? [new TextRun({ children: [new Tab(), right], size: 19, color: '333333' })] : []),
+      ...(right ? [new TextRun({ text: right, break: 1, size: 19, color: '333333' })] : []),
     ],
     spacing: { after: 40 },
+    keepNext: true,
   });
 }
 
@@ -133,6 +132,7 @@ function bulletPara(text: string): Paragraph {
     children: [new TextRun({ text, size: 20 })],
     bullet: { level: 0 },
     spacing: { after: 30 },
+    widowControl: true,
   });
 }
 

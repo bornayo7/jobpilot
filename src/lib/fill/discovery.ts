@@ -12,6 +12,9 @@ const CANDIDATE_SELECTOR =
   'input, textarea, select, [role="combobox"], [contenteditable="true"]';
 
 let idCounter = 0;
+// A copied DOM attribute is not an element identity. Frameworks clone form
+// markup, including our stamp; only the actual element keeps its old id.
+const fieldIds = new WeakMap<HTMLElement, string>();
 function nextFieldId(): string {
   return `jp-${Date.now().toString(36)}-${(idCounter++).toString(36)}`;
 }
@@ -46,7 +49,8 @@ export function discoverFields(atsId: AtsId | null, root: ParentNode = document)
 
     if (!isVisible(el) && control !== 'file') continue; // file inputs hide behind styled buttons
 
-    const fieldId = el.getAttribute(FIELD_ID_ATTR) ?? nextFieldId();
+    const fieldId = fieldIds.get(el) ?? nextFieldId();
+    fieldIds.set(el, fieldId);
     el.setAttribute(FIELD_ID_ATTR, fieldId);
 
     const label = labelFor(el);
@@ -85,14 +89,22 @@ export function discoverFields(atsId: AtsId | null, root: ParentNode = document)
 export function observeFields(onChange: () => void, debounceMs = 400): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const observer = new MutationObserver((mutations) => {
-    const relevant = mutations.some(
-      (m) => m.type === 'childList' && (m.addedNodes.length > 0 || m.removedNodes.length > 0),
-    );
+    const relevant = mutations.some((m) => m.type === 'attributes' || m.type === 'childList' && (m.addedNodes.length > 0 || m.removedNodes.length > 0));
     if (!relevant) return;
+    observeRoots(document);
     clearTimeout(timer);
     timer = setTimeout(onChange, debounceMs);
   });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  const observed = new WeakSet<Node>();
+  const observeRoots = (root: Document | ShadowRoot) => {
+    if (!observed.has(root)) {
+      observed.add(root);
+      observer.observe(root, { childList: true, subtree: true, attributes: true,
+        attributeFilter: ['disabled', 'readonly', 'hidden', 'aria-hidden', 'aria-disabled', 'aria-readonly', 'name', 'type', 'role', 'class', 'style'] });
+    }
+    for (const el of root.querySelectorAll('*')) if (el.shadowRoot) observeRoots(el.shadowRoot);
+  };
+  observeRoots(document);
   return () => {
     clearTimeout(timer);
     observer.disconnect();
@@ -100,7 +112,7 @@ export function observeFields(onChange: () => void, debounceMs = 400): () => voi
 }
 
 export function findByFieldId(fieldId: string): HTMLElement | null {
-  const matches = deepQuerySelectorAll<HTMLElement>(`[${FIELD_ID_ATTR}="${fieldId}"]`);
+  const matches = deepQuerySelectorAll<HTMLElement>(`[${FIELD_ID_ATTR}]`).filter((el) => fieldIds.get(el) === fieldId);
   return matches.find((el) => !isUnavailable(el)) ?? matches[0] ?? null;
 }
 
@@ -126,8 +138,8 @@ function describeRadioGroup(atsId: AtsId | null, group: HTMLInputElement[]): For
   if (!first) return null;
 
   const fieldId =
-    group.find((r) => r.hasAttribute(FIELD_ID_ATTR))?.getAttribute(FIELD_ID_ATTR) ?? nextFieldId();
-  for (const member of group) member.setAttribute(FIELD_ID_ATTR, fieldId);
+    group.map((r) => fieldIds.get(r)).find(Boolean) ?? nextFieldId();
+  for (const member of group) { fieldIds.set(member, fieldId); member.setAttribute(FIELD_ID_ATTR, fieldId); }
 
   const options = group.map((r) => ({ value: r.value, label: radioOptionLabel(r) }));
   const name = first.getAttribute('name') ?? undefined;

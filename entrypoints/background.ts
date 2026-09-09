@@ -10,6 +10,7 @@ import {
 } from '@lib/messaging/protocol';
 import type { AtsId } from '@lib/fill/adapters/detect';
 import { SubmissionTracker } from '@lib/tracker/submissions';
+import { registerEnabledSite } from '@lib/content/registerSite';
 
 const CONTEXT_MENU_ID = 'jobpilot-fix-field';
 
@@ -18,7 +19,7 @@ type Port = Browser.runtime.Port;
 /** One connected content script. `ready` is what its cs/ready reported, once it has. */
 interface Frame {
   port: Port;
-  ready: { atsId: AtsId | null; url: string } | null;
+  ready: { atsId: AtsId | null; url: string; documentId: string } | null;
 }
 
 /**
@@ -39,6 +40,7 @@ export default defineBackground(() => {
   /** port -> the tab it shows and the window it lives in (null = unknown). */
   const panels = new Map<Port, { tabId: number | null; windowId: number | null }>();
   const submissions = new SubmissionTracker();
+  const runs = new Map<string, { panel: Port; tabId: number; frameId: number; documentId: string }>();
 
   const framesOf = (tabId: number) => frames.get(tabId) ?? new Map<number, Frame>();
   const panelsOn = (tabId: number) => [...panels].filter(([, attached]) => attached.tabId === tabId).map(([port]) => port);
@@ -53,11 +55,21 @@ export default defineBackground(() => {
 
   const sendToFrame = (tabId: number, frameId: number, msg: BgToCs) => {
     const frame = framesOf(tabId).get(frameId);
-    if (!frame) return;
+    if (!frame) return false;
     try {
       frame.port.postMessage(msg);
+      return true;
     } catch {
       framesOf(tabId).delete(frameId);
+      return false;
+    }
+  };
+  const failRuns = (matches: (run: { panel: Port; tabId: number; frameId: number; documentId: string }) => boolean, error: string) => {
+    for (const [runId, run] of runs) {
+      if (!matches(run)) continue;
+      sendToFrame(run.tabId, run.frameId, { t: 'bg/cancel', runId, documentId: run.documentId });
+      sendToPanel(run.panel, { t: 'bg/runFailed', runId, error });
+      runs.delete(runId);
     }
   };
 
@@ -73,6 +85,7 @@ export default defineBackground(() => {
       if (frame.ready) {
         sendToPanel(port, { t: 'bg/frameEvent', tabId, frameId, event: { t: 'cs/ready', ...frame.ready } });
       }
+      sendToFrame(tabId, frameId, { t: 'bg/scan' });
     }
   };
 
@@ -111,11 +124,24 @@ export default defineBackground(() => {
       if (!owns()) return;
       const msg = raw as CsToBg;
       if (msg.t === 'cs/ready') {
-        frame.ready = { atsId: msg.atsId, url: msg.url };
+        if (frame.ready?.documentId !== msg.documentId) failRuns((run) => run.tabId === tabId && run.frameId === frameId, 'The application document changed');
+        frame.ready = { atsId: msg.atsId, url: msg.url, documentId: msg.documentId };
+      } else if (msg.documentId !== frame.ready?.documentId) {
+        return;
+      } else if (msg.t === 'cs/fillResults') {
+        const run = runs.get(msg.runId);
+        if (!run || run.tabId !== tabId || run.frameId !== frameId || run.documentId !== msg.documentId) return;
+        runs.delete(msg.runId);
+        sendToPanel(run.panel, { t: 'bg/frameEvent', tabId, frameId, event: msg });
+        return;
       } else if (msg.t === 'cs/submitAttempt') {
-        submissions.attempted(tabId, { url: msg.url, title: msg.title, answers: msg.answers });
+        void submissions.attempted(tabId, { ...msg.provenance, documentId: msg.documentId, url: msg.url, title: msg.title, answers: msg.answers })
+          .catch((error) => { for (const panel of panelsOn(tabId)) sendToPanel(panel, { t: 'bg/trackerStatus', tabId, message: `Could not preserve application evidence: ${String(error)}` }); });
       } else if (msg.t === 'cs/submitDetected') {
-        void submissions.confirmed(tabId, { url: msg.url, title: msg.title });
+        void submissions.confirmed(tabId, msg).then((result) => {
+          const message = result.status === 'recorded' ? `Application recorded for ${result.job.company}.` : result.reason;
+          for (const panel of panelsOn(tabId)) sendToPanel(panel, { t: 'bg/trackerStatus', tabId, message });
+        });
       }
       for (const panel of panelsOn(tabId)) {
         sendToPanel(panel, { t: 'bg/frameEvent', tabId, frameId, event: msg });
@@ -124,6 +150,7 @@ export default defineBackground(() => {
 
     port.onDisconnect.addListener(() => {
       if (!owns()) return;
+      failRuns((run) => run.tabId === tabId && run.frameId === frameId, 'The application frame disconnected');
       tabFrames.delete(frameId);
       if (tabFrames.size === 0) frames.delete(tabId);
       for (const panel of panelsOn(tabId)) sendToPanel(panel, { t: 'bg/frameGone', tabId, frameId });
@@ -157,44 +184,42 @@ export default defineBackground(() => {
         case 'panel/extractJd':
           broadcastToTab(msg.tabId, { t: 'bg/extractJd' });
           break;
-        case 'panel/execute':
-          sendToFrame(msg.tabId, msg.frameId, { t: 'bg/execute', instructions: msg.instructions, files: msg.files });
+        case 'panel/execute': {
+          const frame = framesOf(msg.tabId).get(msg.frameId);
+          if (!frame?.ready || frame.ready.documentId !== msg.documentId || [...runs.values()].some((run) => run.tabId === msg.tabId && run.frameId === msg.frameId)) {
+            sendToPanel(port, { t: 'bg/runFailed', runId: msg.runId, error: 'The page changed or another fill is still running' });
+            break;
+          }
+          runs.set(msg.runId, { panel: port, tabId: msg.tabId, frameId: msg.frameId, documentId: msg.documentId });
+          if (!sendToFrame(msg.tabId, msg.frameId, { t: 'bg/execute', documentId: msg.documentId, runId: msg.runId, instructions: msg.instructions, files: msg.files, provenance: msg.provenance })) {
+            failRuns((run) => run.panel === port && run.documentId === msg.documentId, 'The application frame is unavailable');
+          }
+          break;
+        }
+        case 'panel/cancel':
+          if (runs.get(msg.runId)?.panel === port) {
+            sendToFrame(msg.tabId, msg.frameId, { t: 'bg/cancel', documentId: msg.documentId, runId: msg.runId });
+            runs.delete(msg.runId);
+          }
           break;
         case 'panel/highlight':
           sendToFrame(msg.tabId, msg.frameId, { t: 'bg/highlight', fieldId: msg.fieldId });
           break;
         case 'panel/registerSite':
-          await registerSite(msg.origin, msg.tabId);
+          try {
+            await registerEnabledSite(msg);
+            sendToPanel(port, { t: 'bg/siteRegistered', requestId: msg.requestId });
+          } catch (error) {
+            sendToPanel(port, { t: 'bg/siteRegistered', requestId: msg.requestId, error: String(error instanceof Error ? error.message : error) });
+          }
           break;
       }
     });
 
     port.onDisconnect.addListener(() => {
+      failRuns((run) => run.panel === port, 'The panel disconnected');
       panels.delete(port);
     });
-  };
-
-  /** Persist content-script injection for an origin the user enabled, then reload. */
-  const registerSite = async (origin: string, tabId: number) => {
-    const registrationId = `jobpilot-site-${new URL(origin).host}`;
-    try {
-      const existing = await browser.scripting.getRegisteredContentScripts({ ids: [registrationId] });
-      if (existing.length === 0) {
-        await browser.scripting.registerContentScripts([
-          {
-            id: registrationId,
-            js: ['content-scripts/ats.js'],
-            matches: [`${origin}/*`],
-            allFrames: true,
-            runAt: 'document_idle',
-            persistAcrossSessions: true,
-          },
-        ]);
-      }
-      await browser.tabs.reload(tabId);
-    } catch (err) {
-      console.error('[jobpilot] registerSite failed', err);
-    }
   };
 
   browser.runtime.onConnect.addListener((port) => {
@@ -203,12 +228,16 @@ export default defineBackground(() => {
   });
 
   // A closed tab can never produce the confirmation its attempt was waiting for.
-  browser.tabs.onRemoved.addListener((tabId) => submissions.forget(tabId));
+  browser.tabs.onRemoved.addListener((tabId) => {
+    failRuns((run) => run.tabId === tabId, 'The tab closed');
+    void submissions.forget(tabId).catch((error) => console.warn('[jobpilot] attempt cleanup failed', error));
+  });
 
   // Navigation to an unenabled site never sends cs/ready. Clear the previous
   // application's state as soon as navigation starts, including reloads.
   browser.tabs.onUpdated.addListener((tabId, change) => {
     if (change.status !== 'loading' && !change.url) return;
+    failRuns((run) => run.tabId === tabId, 'The application page navigated');
     for (const panel of panelsOn(tabId)) {
       sendToPanel(panel, { t: 'bg/tabChanged', tabId, url: change.url ?? '', reset: true });
     }

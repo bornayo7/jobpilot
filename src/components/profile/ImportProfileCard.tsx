@@ -17,11 +17,14 @@ export function ImportProfileCard({ profile, update }: CardProps) {
   const [pasted, setPasted] = useState('');
   const [outcome, setOutcome] = useState<ProfileImportOutcome | null>(null);
   const [applied, setApplied] = useState(false);
+  const [error, setError] = useState('');
 
   const copyPrompt = async () => {
-    await navigator.clipboard.writeText(buildProfileImportPrompt());
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
+    try {
+      await navigator.clipboard.writeText(buildProfileImportPrompt());
+      setCopied(true); setError('');
+      setTimeout(() => setCopied(false), 1800);
+    } catch (err) { setError(`Prompt could not be copied. ${String(err)}`); }
   };
 
   const runParse = () => {
@@ -45,6 +48,7 @@ export function ImportProfileCard({ profile, update }: CardProps) {
         under it · 3) paste the JSON reply back here. Work history, education, projects, and skills
         are filled in; visa/EEO/salary answers are never imported (a resume can't know them).
       </p>
+      {error && <p role="alert" className="error-text">{error}</p>}
       <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
         <button className="primary" onClick={copyPrompt}>
           {copied ? 'Copied ✓' : 'Copy conversion prompt'}

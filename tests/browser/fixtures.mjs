@@ -21,7 +21,7 @@ export { expect };
 
 export const applicationHtml = `<!doctype html><html><head><title>Software Engineer - Acme</title></head>
 <body><main><h1>Software Engineer</h1><p>Build reliable software at Acme. TypeScript and testing are required.</p>
-<form><label>First name<input name="name" autocomplete="given-name"></label>
+<form><label>First name<input name="firstName" autocomplete="given-name"></label>
 <label>Email<input name="email" type="email" autocomplete="email"></label>
 <label>Resume<input type="file" name="resume"></label>
 <fieldset><legend>Will you require visa sponsorship?</legend>

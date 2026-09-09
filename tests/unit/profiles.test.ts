@@ -1,74 +1,71 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import {
-  createProfile,
-  deleteProfile,
-  listProfiles,
-  loadProfile,
-  saveProfile,
-  switchProfile,
-} from '@lib/storage/profileStore';
+import { createProfile, deleteProfile, listProfiles, loadProfile, loadProfileSnapshot, saveProfileSnapshot, switchProfile, renameProfile, ProfileConflictError } from '@lib/storage/profileStore';
+import { getDb } from '@lib/storage/db';
 
-describe('multi-profile store', () => {
-  beforeEach(() => fakeBrowser.reset());
-
-  it('migrates a legacy single profile into the container', async () => {
-    await fakeBrowser.storage.local.set({
-      'jobpilot:profile': { schemaVersion: 1, basics: { firstName: 'Ada' } },
-    });
-    const profile = await loadProfile();
-    expect(profile.basics.firstName).toBe('Ada');
-    const metas = await listProfiles();
-    expect(metas).toHaveLength(1);
-    expect(metas[0]).toMatchObject({ name: 'Default', active: true });
-  });
-
-  it('save/load operate on the active profile; switching swaps contents', async () => {
-    const first = await loadProfile();
-    first.basics.firstName = 'Ada';
-    await saveProfile(first);
-
-    const secondId = await createProfile('ML roles');
-    const blank = await loadProfile();
-    expect(blank.basics.firstName).toBe(''); // new profile is empty and active
-    blank.basics.firstName = 'Grace';
-    await saveProfile(blank);
-
-    const metas = await listProfiles();
-    const defaultId = metas.find((m) => m.name === 'Default')!.id;
-    await switchProfile(defaultId);
-    expect((await loadProfile()).basics.firstName).toBe('Ada');
-    await switchProfile(secondId);
+beforeEach(async () => { fakeBrowser.reset(); await (await getDb()).clear('recoveryJournal'); });
+describe('identity-aware profile store', () => {
+  it('migrates legacy data and revisions without losing content', async () => {
+    await fakeBrowser.storage.local.set({ 'jobpilot:profile': { basics: { firstName: 'Ada' } } });
+    const snapshot = await loadProfileSnapshot();
+    expect(snapshot).toMatchObject({ id: 'default', revision: 0, profile: { basics: { firstName: 'Ada' } } });
+    snapshot.profile.basics.firstName = 'Grace';
+    const saved = await saveProfileSnapshot(snapshot, snapshot.profile);
+    expect(saved.revision).toBe(1);
     expect((await loadProfile()).basics.firstName).toBe('Grace');
   });
-
-  it('repairs a container whose activeId points nowhere instead of wiping it', async () => {
-    await fakeBrowser.storage.local.set({
-      'jobpilot:profiles': {
-        activeId: 'gone',
-        profiles: {
-          swe: { name: 'SWE', profile: { schemaVersion: 1, basics: { firstName: 'Ada' } } },
-          ml: { name: 'ML', profile: { schemaVersion: 1, basics: { firstName: 'Grace' } } },
-        },
-      },
-    });
+  it('keeps the original save target when the active profile switches', async () => {
+    const first = await loadProfileSnapshot();
+    const second = await createProfile('ML roles');
+    first.profile.basics.firstName = 'Ada';
+    await saveProfileSnapshot(first, first.profile);
+    expect((await loadProfile()).basics.firstName).toBe('');
+    await switchProfile(first.id);
     expect((await loadProfile()).basics.firstName).toBe('Ada');
-    const metas = await listProfiles();
-    expect(metas.map((m) => m.name).sort()).toEqual(['ML', 'SWE']);
-    expect(metas.find((m) => m.active)!.id).toBe('swe');
+    expect(second).not.toBe(first.id);
   });
-
-  it('duplicate copies the active profile; delete refuses to remove the last one', async () => {
-    const active = await loadProfile();
-    active.basics.email = 'ada@example.com';
-    await saveProfile(active);
-
-    await createProfile('Copy', true);
+  it('preserves simultaneous creates with clone-faithful storage', async () => {
+    await loadProfile();
+    const [a,b] = await Promise.all([createProfile('A'),createProfile('B')]);
+    expect((await listProfiles()).map((row) => row.id)).toEqual(expect.arrayContaining(['default', a, b]));
+    expect(await listProfiles()).toHaveLength(3);
+  });
+  it('rejects a stale save without erasing the newer content', async () => {
+    const base = await loadProfileSnapshot();
+    const newer = structuredClone(base.profile); newer.basics.firstName = 'Newer';
+    await saveProfileSnapshot(base, newer);
+    base.profile.basics.firstName = 'Stale';
+    await expect(saveProfileSnapshot(base, base.profile)).rejects.toBeInstanceOf(ProfileConflictError);
+    expect((await loadProfile()).basics.firstName).toBe('Newer');
+  });
+  it('rename preserves the content revision so a dirty draft remains saveable', async () => {
+    const base = await loadProfileSnapshot();
+    await renameProfile(base.id, 'Renamed');
+    base.profile.basics.firstName = 'Draft';
+    expect(await saveProfileSnapshot(base, base.profile)).toMatchObject({ name: 'Renamed', revision: 1 });
+  });
+  it('repairs a dangling active id without replacing surviving profiles', async () => {
+    await fakeBrowser.storage.local.set({ 'jobpilot:profiles': { activeId:'gone', profiles:{a:{name:'A',profile:{basics:{firstName:'Ada'}}},b:{name:'B',profile:{basics:{firstName:'Grace'}}}} } });
+    expect((await loadProfile()).basics.firstName).toBe('Ada');
+    expect(await listProfiles()).toHaveLength(2);
+  });
+  it('does not disguise unsupported stored content as an empty profile', async () => {
+    const raw = { activeId:'a',profiles:{a:{name:'Future',profile:{schemaVersion:2,basics:{firstName:'Preserve'}}}} };
+    await fakeBrowser.storage.local.set({ 'jobpilot:profiles':raw });
+    await expect(loadProfile()).rejects.toThrow(/newer JobPilot/);
+    expect((await fakeBrowser.storage.local.get('jobpilot:profiles'))['jobpilot:profiles']).toEqual(raw);
+  });
+  it('duplicates independently and refuses to delete the final profile', async () => {
+    const base = await loadProfileSnapshot(); base.profile.basics.email = 'ada@example.com';
+    await saveProfileSnapshot(base,base.profile);
+    await createProfile('Copy',true);
     expect((await loadProfile()).basics.email).toBe('ada@example.com');
-
-    const metas = await listProfiles();
-    for (const meta of metas) await deleteProfile(meta.id);
-    // One must survive.
+    for (const profile of await listProfiles()) await deleteProfile(profile.id);
     expect(await listProfiles()).toHaveLength(1);
+  });
+  it('test storage never gives callers the stored object reference', async () => {
+    await fakeBrowser.storage.local.set({ example: { value: 'saved' } });
+    const first = await fakeBrowser.storage.local.get<{ example: { value: string } }>('example'); first.example.value = 'mutated';
+    expect((await fakeBrowser.storage.local.get<{ example: { value: string } }>('example')).example.value).toBe('saved');
   });
 });

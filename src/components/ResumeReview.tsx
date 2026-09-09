@@ -45,7 +45,7 @@ export function ResumeReview({
       {problems.length > 0 && (
         <div className="warn-box" style={{ marginTop: 8 }}>
           <div>
-            <strong>Validation failed — version not stored:</strong>
+            <strong>Resume needs attention:</strong>
             <ul className="problem-list">
               {problems.map((problem, i) => (
                 <li key={i}>{problem}</li>
@@ -55,7 +55,7 @@ export function ResumeReview({
         </div>
       )}
       <button className="primary" style={{ marginTop: 8 }} onClick={onApprove} disabled={!!busy}>
-        {busy || 'Approve → validate + store PDF & DOCX'}
+        {busy || 'Approve and save PDF + DOCX'}
       </button>
     </div>
   );

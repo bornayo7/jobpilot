@@ -13,11 +13,14 @@ import { detectAts } from '../fill/adapters/detect';
 const CONFIRMATION_TEXT =
   /thank you for (applying|your application)|thank you for your interest in [^.!\n]{0,80}?\b(applying|application)\b|application (has been |was |is )?(submitted|received|sent|complete)|successfully (submitted|applied)|we('ve| have) received your application|your application to .{0,60} (was|has been) (sent|submitted)/i;
 
-const CONFIRMATION_URL = /\/(thanks|thank-you|confirmation|already_applied|post-apply)\b/i;
+const CONFIRMATION_URL = /\/(thanks|thank-you|confirmation|already_applied|post-apply)\/?$/i;
 
 export function looksLikeConfirmation(url: string, bodyText: string): boolean {
-  if (CONFIRMATION_URL.test(url)) return true;
-  return CONFIRMATION_TEXT.test(bodyText.slice(0, 6000));
+  try { if (CONFIRMATION_URL.test(new URL(url).pathname)) return true; } catch { /* text evidence can still qualify */ }
+  return bodyText.slice(0, 6000).split(/[.!?\n]+/).some((sentence) => {
+    const text = sentence.trim();
+    return /^(thank you|your application|application|we(?:'ve| have)|successfully)\b/i.test(text) && CONFIRMATION_TEXT.test(text);
+  });
 }
 
 /** Buttons whose activation counts as a submit attempt (answer snapshot time). */

@@ -1,58 +1,49 @@
-import { getDb, type StoredBlob } from './db';
+import type { StoredBlob, DocumentMeta } from './db';
 import { newId } from '../schema/profile';
 import type { SerializedFile } from '../messaging/protocol';
 import { arrayBufferToBase64 } from '../util/base64';
-
-export interface StoredDocMeta {
-  id: string;
-  name: string;
-  type: string;
-  size: number;
-  createdAt: number;
-}
+import { withStorageRead, withStorageWrite } from './coordination';
+import { GeneratedDocumentError, removeArtifacts, type RemovalOptions } from './documentRemoval';
+export { DocumentInUseError, GeneratedDocumentError } from './documentRemoval';
+export type StoredDocMeta = DocumentMeta;
 
 export async function storeDocument(file: File): Promise<StoredDocMeta> {
-  const doc: StoredBlob = {
-    id: newId(),
-    name: file.name,
-    type: file.type || 'application/octet-stream',
-    bytes: await file.arrayBuffer(),
-    createdAt: Date.now(),
-  };
-  const db = await getDb();
-  await db.put('blobs', doc);
-  return metaOf(doc);
+  const doc: StoredBlob = { id: newId(), name: file.name, type: file.type || 'application/octet-stream',
+    bytes: await file.arrayBuffer(), createdAt: Date.now() };
+  const meta: DocumentMeta = { id: doc.id, name: doc.name, type: doc.type, size: doc.bytes.byteLength,
+    createdAt: doc.createdAt, source: 'upload' };
+  return withStorageWrite(async (db) => {
+    const tx = db.transaction(['blobs', 'documentMeta'], 'readwrite');
+    void tx.done.catch(() => undefined);
+    try {
+      await tx.objectStore('blobs').put(doc);
+      await tx.objectStore('documentMeta').put(meta);
+      await tx.done;
+      return meta;
+    } catch (error) {
+      try { tx.abort(); } catch { /* already aborted */ }
+      await tx.done.catch(() => undefined);
+      throw error;
+    }
+  });
 }
-
-export async function listDocuments(): Promise<StoredDocMeta[]> {
-  const db = await getDb();
-  const all = await db.getAll('blobs');
-  return all.map(metaOf).sort((a, b) => b.createdAt - a.createdAt);
+export function listDocuments(): Promise<StoredDocMeta[]> {
+  return withStorageRead(async (db) => (await db.getAll('documentMeta')).sort((a, b) => b.createdAt - a.createdAt));
 }
-
-/** One stored document with its bytes, or null when the id is dangling. */
-export async function getDocument(id: string): Promise<StoredBlob | null> {
-  const db = await getDb();
-  return (await db.get('blobs', id)) ?? null;
+export function getDocument(id: string): Promise<StoredBlob | null> {
+  return withStorageRead(async (db) => (await db.get('blobs', id)) ?? null);
 }
-
-export async function getDocumentMeta(id: string): Promise<StoredDocMeta | null> {
-  const doc = await getDocument(id);
-  return doc ? metaOf(doc) : null;
+export function getDocumentMeta(id: string): Promise<StoredDocMeta | null> {
+  return withStorageRead(async (db) => (await db.get('documentMeta', id)) ?? null);
 }
-
-export async function deleteDocument(id: string): Promise<void> {
-  const db = await getDb();
-  await db.delete('blobs', id);
+export function deleteDocument(id: string, options: RemovalOptions = {}): Promise<void> {
+  return withStorageWrite(async (db) => {
+    const owner = (await db.getAll('resumeVersions')).find((row) => row.pdfBlobId === id || row.docxBlobId === id);
+    if (owner) throw new GeneratedDocumentError(owner.id);
+    await removeArtifacts(db, [id], undefined, options);
+  });
 }
-
-/** Load a stored document as the transferable shape the executor consumes. */
 export async function loadDocumentAsFile(id: string): Promise<SerializedFile | null> {
   const doc = await getDocument(id);
-  if (!doc) return null;
-  return { name: doc.name, type: doc.type, dataBase64: arrayBufferToBase64(doc.bytes) };
-}
-
-function metaOf(doc: StoredBlob): StoredDocMeta {
-  return { id: doc.id, name: doc.name, type: doc.type, size: doc.bytes.byteLength, createdAt: doc.createdAt };
+  return doc ? { name: doc.name, type: doc.type, dataBase64: arrayBufferToBase64(doc.bytes) } : null;
 }

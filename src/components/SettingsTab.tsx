@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { browser } from '#imports';
 import {
-  loadSettings,
-  saveSettings,
+  patchSettings,
+  type SettingsSnapshot,
   type ModelRef,
   type Settings,
 } from '@lib/storage/settingsStore';
 import { providerFor, routeTask } from '@lib/providers/router';
 import type { ProviderHealth } from '@lib/providers/types';
 import { CommaListInput } from './CommaListInput';
+import { useSettings } from '@hooks/useStores';
+import { changedSettings } from './settingsDraft';
 
 const PROVIDER_CHOICES: { value: ModelRef['provider']; label: string }[] = [
   { value: 'anthropic', label: 'Anthropic' },
@@ -20,18 +22,22 @@ const PROVIDER_CHOICES: { value: ModelRef['provider']; label: string }[] = [
 
 export function SettingsTab() {
   const [settings, setSettings] = useState<Settings | null>(null);
+  const { snapshot, error: loadError, reload } = useSettings();
+  const [base, setBase] = useState<SettingsSnapshot | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const [health, setHealth] = useState<Record<string, ProviderHealth>>({});
   const [testOutput, setTestOutput] = useState('');
   const [testing, setTesting] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    loadSettings().then(setSettings);
-    return () => abortRef.current?.abort();
-  }, []);
+    if (snapshot && !dirty) { setSettings(snapshot.settings); setBase(snapshot); }
+  }, [snapshot, dirty]);
+  useEffect(() => () => abortRef.current?.abort(), []);
 
-  if (!settings) return <div className="placeholder"><p>Loading…</p></div>;
+  if (!settings || !base) return <div className="placeholder"><p role="status">{loadError || 'Loading settings…'}</p>{loadError && <><button onClick={() => void reload()}>Retry</button><button onClick={() => void browser.runtime.openOptionsPage()}>Open backup recovery</button></>}</div>;
 
   const update = (patch: Partial<Settings>) => {
     setSettings({ ...settings, ...patch });
@@ -39,8 +45,13 @@ export function SettingsTab() {
   };
 
   const save = async () => {
-    await saveSettings(settings);
-    setDirty(false);
+    if (saving) return;
+    setSaving(true); setError('');
+    try {
+      const saved = await patchSettings(changedSettings(base.settings, settings), base);
+      setSettings(saved.settings); setBase(saved); setDirty(false);
+    } catch (err) { setError(`Settings were not saved. Your draft is preserved. ${String(err)}`); }
+    finally { setSaving(false); }
   };
 
   const checkHealth = async (provider: ModelRef['provider']) => {
@@ -80,7 +91,8 @@ export function SettingsTab() {
   };
 
   return (
-    <div className="settings">
+    <fieldset className="settings" disabled={saving}>
+      {(error || loadError) && <div className="warn-box" role="alert">{error || loadError}<button onClick={() => { setDirty(false); setError(''); void reload(); }}>Reload saved settings</button></div>}
       <section>
         <h2>API keys</h2>
         <p className="hint">
@@ -135,16 +147,11 @@ export function SettingsTab() {
       </section>
 
       <section>
-        <h2>Task routing</h2>
+        <h2>Models</h2>
         <TaskRouting
           label="Field mapping"
           value={settings.routing.mapping}
           onChange={(mapping) => update({ routing: { ...settings.routing, mapping } })}
-        />
-        <TaskRouting
-          label="JD extraction"
-          value={settings.routing.extraction}
-          onChange={(extraction) => update({ routing: { ...settings.routing, extraction } })}
         />
       </section>
 
@@ -225,12 +232,12 @@ export function SettingsTab() {
       </section>
 
       <div className="save-bar">
-        <button className="primary" onClick={save} disabled={!dirty}>
-          {dirty ? 'Save settings' : 'Saved'}
+        <button className="primary" onClick={() => void save()} disabled={!dirty || saving}>
+          {saving ? 'Saving…' : dirty ? 'Save settings' : 'Saved'}
         </button>
         <button onClick={() => browser.runtime.openOptionsPage()}>Open profile editor</button>
       </div>
-    </div>
+    </fieldset>
   );
 }
 
@@ -247,6 +254,7 @@ function TaskRouting({
     <div className="routing-row">
       <span className="routing-label">{label}</span>
       <select
+        aria-label={`${label} provider`}
         value={value.provider}
         onChange={(e) => onChange({ ...value, provider: e.target.value as ModelRef['provider'] })}
       >
@@ -257,6 +265,7 @@ function TaskRouting({
         ))}
       </select>
       <input
+        aria-label={`${label} model`}
         value={value.model}
         onChange={(e) => onChange({ ...value, model: e.target.value })}
         placeholder="model id"

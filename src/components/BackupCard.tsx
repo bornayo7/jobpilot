@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { decryptBackup, encryptBackup, type BackupEnvelope } from '@lib/util/backup';
-import { gatherBackupPayload, restoreBackupPayload, type BackupPayload } from '@lib/storage/backupStore';
+import { gatherBackupPayload, inspectBackupPayload, restoreBackupPayload, type BackupPayload } from '@lib/storage/backupStore';
 import { downloadFile } from '@lib/util/download';
 
 /**
@@ -11,6 +11,8 @@ import { downloadFile } from '@lib/util/download';
 export function BackupCard() {
   const [passphrase, setPassphrase] = useState('');
   const [status, setStatus] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<{ payload: BackupPayload; warnings: string[] } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const exportAll = async () => {
@@ -19,6 +21,7 @@ export function BackupCard() {
       return;
     }
     setStatus('Encrypting…');
+    setBusy(true);
     try {
       const payload = await gatherBackupPayload();
       const envelope = await encryptBackup(payload, passphrase);
@@ -29,7 +32,7 @@ export function BackupCard() {
       setStatus('Backup downloaded. The passphrase is NOT stored anywhere — keep it.');
     } catch (err) {
       setStatus(`Export failed: ${String(err).slice(0, 200)}`);
-    }
+    } finally { setBusy(false); }
   };
 
   const importAll = async (file: File) => {
@@ -37,18 +40,27 @@ export function BackupCard() {
       setStatus('Enter the backup passphrase first.');
       return;
     }
-    if (!confirm('Restoring REPLACES all current JobPilot data (profiles, answers, tracker, documents). Continue?')) {
-      return;
-    }
+    setPending(null); setBusy(true);
     setStatus('Decrypting…');
     try {
       const envelope = JSON.parse(await file.text()) as BackupEnvelope;
       const payload = (await decryptBackup(envelope, passphrase)) as BackupPayload;
-      await restoreBackupPayload(payload);
-      setStatus('Restored. Reload the extension pages to see the data.');
+      const inspection = inspectBackupPayload(payload);
+      setPending({ payload, warnings: inspection.warnings });
+      setStatus('Backup decrypted and validated. Review the restore below.');
     } catch (err) {
       setStatus(String(err).slice(0, 200));
-    }
+    } finally { setBusy(false); }
+  };
+  const restore = async () => {
+    if (!pending || busy) return;
+    setBusy(true); setStatus('Restoring data…');
+    try {
+      const result = await restoreBackupPayload(pending.payload);
+      setPending(null);
+      setStatus(`Backup restored.${result.warnings.length ? ` ${result.warnings.join(' ')}` : ''}`);
+    } catch (err) { setStatus(`Restore did not finish. ${String(err)}`); }
+    finally { setBusy(false); }
   };
 
   return (
@@ -62,16 +74,17 @@ export function BackupCard() {
         Passphrase
         <input
           type="password"
+          disabled={busy}
           value={passphrase}
           onChange={(e) => setPassphrase(e.target.value)}
           placeholder="min 8 characters — not stored anywhere"
         />
       </label>
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <button className="primary" onClick={() => void exportAll()}>
+        <button disabled={busy} className="primary" onClick={() => void exportAll()}>
           Export encrypted backup
         </button>
-        <button onClick={() => fileRef.current?.click()}>Restore from file…</button>
+        <button disabled={busy} onClick={() => fileRef.current?.click()}>Inspect backup…</button>
         <input
           ref={fileRef}
           type="file"
@@ -84,7 +97,8 @@ export function BackupCard() {
           }}
         />
       </div>
-      {status && <p className="hint" style={{ marginTop: 8 }}>{status}</p>}
+      {pending && <div className="warn-box"><div><strong>Replace all current JobPilot data?</strong><p>This replaces saved profiles, settings, answers, applications and documents. Export a backup first if you need the current data.</p>{pending.warnings.length > 0 && <ul>{pending.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}</div><button disabled={busy} onClick={() => void restore()}>Replace data with this backup</button><button disabled={busy} onClick={() => setPending(null)}>Cancel restore</button></div>}
+      {status && <p className="hint" role="status" style={{ marginTop: 8 }}>{status}</p>}
     </section>
   );
 }

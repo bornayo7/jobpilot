@@ -7,6 +7,7 @@ export default defineConfig({
   plugins: [WxtVitest() as unknown as Plugin[]],
   test: {
     environment: 'happy-dom',
+    setupFiles: ['tests/setup.ts'],
     include: ['tests/unit/**/*.test.ts', 'tests/unit/**/*.test.tsx'],
   },
 });

@@ -2,7 +2,8 @@ import type { Profile, TaggedBullet } from '@lib/schema/profile';
 import { CommaListInput } from '@components/CommaListInput';
 
 /** Every profile-editor card edits the draft profile through one patch callback. */
-export type CardProps = { profile: Profile; update: (patch: Partial<Profile>) => void };
+export type ProfilePatch = Partial<Profile> | ((current: Profile) => Partial<Profile>);
+export type CardProps = { profile: Profile; update: (patch: ProfilePatch) => void };
 
 /**
  * Add/patch/remove for a list the profile holds, each committing the whole
@@ -70,8 +71,8 @@ export function BulletsEditor({
             Tags
             <CommaListInput value={bullet.tags} placeholder="react, testing" onChange={(tags) => list.patch(i, { tags })} />
           </label>
-          <button className="entry-remove" onClick={() => list.remove(i)}>
-            ✕
+          <button className="entry-remove" aria-label={`Remove bullet ${i + 1}`} onClick={() => list.remove(i)}>
+            Remove
           </button>
         </div>
       ))}

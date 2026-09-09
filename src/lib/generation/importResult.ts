@@ -1,6 +1,5 @@
 import { ResumeVersionSchema, type ResumeVersion } from '../schema/resumeVersion';
 import type { Profile } from '../schema/profile';
-import { normalizeForSignature } from '../fill/signature';
 
 export type ImportOutcome =
   | { ok: true; version: ResumeVersion; diff: BulletDiff }
@@ -51,7 +50,7 @@ export function importResumePaste(pasted: string, profile: Profile): ImportOutco
 export function diffBullets(version: ResumeVersion, profile: Profile): BulletDiff {
   const masterBullets = new Set<string>();
   for (const entry of [...profile.work, ...profile.projects]) {
-    for (const bullet of entry.bullets) masterBullets.add(normalizeForSignature(bullet.text));
+    for (const bullet of entry.bullets) masterBullets.add(normalizeBullet(bullet.text));
   }
 
   const known = new Map<string, boolean>();
@@ -62,12 +61,17 @@ export function diffBullets(version: ResumeVersion, profile: Profile): BulletDif
     ...version.projects.flatMap((p) => p.bullets),
   ];
   for (const bullet of versionBullets) {
-    const kept = masterBullets.has(normalizeForSignature(bullet));
+    const kept = masterBullets.has(normalizeBullet(bullet));
     known.set(bullet, kept);
     if (kept) keptCount++;
     else rewrittenCount++;
   }
   return { known, keptCount, rewrittenCount };
+}
+
+/** Whitespace is presentation; punctuation and quantities are resume facts. */
+function normalizeBullet(text: string): string {
+  return text.normalize('NFC').replace(/\s+/gu, ' ').trim();
 }
 
 /** Fenced ```json block first; else the first balanced top-level {...}. */

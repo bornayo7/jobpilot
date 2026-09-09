@@ -31,6 +31,7 @@ describe('valueFor', () => {
     const authorized = valueFor(
       'auth.workAuthorized',
       field({
+        label: 'Are you authorized to work in the United States?',
         control: 'select',
         options: [
           { value: '1', label: 'Yes' },
@@ -45,6 +46,7 @@ describe('valueFor', () => {
     const sponsorship = valueFor(
       'auth.needsSponsorship',
       field({
+        label: 'Will you require sponsorship?',
         control: 'select',
         options: [
           { value: 'y', label: 'Yes' },
@@ -61,6 +63,7 @@ describe('valueFor', () => {
     const sponsorship = valueFor(
       'auth.needsSponsorship',
       field({
+        label: 'Will you require sponsorship?',
         control: 'select',
         options: [
           { value: 'y', label: 'Yes, I will require sponsorship now or in the future' },
@@ -75,6 +78,7 @@ describe('valueFor', () => {
     const authorized = valueFor(
       'auth.workAuthorized',
       field({
+        label: 'Are you authorized to work in the United States?',
         control: 'select',
         options: [
           { value: 'n', label: 'No, I am not authorized to work in the United States' },
@@ -99,6 +103,7 @@ describe('valueFor', () => {
 
   it('answers boolean kinds against a radio group through its option values', () => {
     const radio = field({
+      label: 'Are you authorized to work in the United States?',
       control: 'radio',
       options: [
         { value: 'opt_1', label: 'Yes' },
@@ -109,7 +114,7 @@ describe('valueFor', () => {
       action: 'selectOption',
       value: 'opt_1',
     });
-    expect(valueFor('auth.needsSponsorship', radio, profile, null)?.value).toBe('opt_2');
+    expect(valueFor('auth.needsSponsorship', {...radio, label:'Will you require sponsorship?'}, profile, null)?.value).toBe('opt_2');
   });
 
   it('matches EEO strings to options and always flags for review', () => {

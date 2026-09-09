@@ -14,7 +14,7 @@ import { isUnavailable } from './isUnavailable';
 export function radioGroupOf(radio: HTMLInputElement): HTMLInputElement[] {
   const name = radio.getAttribute('name');
   if (!name) return [radio];
-  const scope: ParentNode = radio.form ?? (radio.getRootNode() as Document | ShadowRoot);
+  const scope: ParentNode = radio.getRootNode() as Document | ShadowRoot;
   const members = Array.from(
     scope.querySelectorAll<HTMLInputElement>(`input[type="radio"][name="${escapeAttr(name)}"]`),
   ).filter((member) => member.form === radio.form);

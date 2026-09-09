@@ -3,6 +3,7 @@ import { deepQuerySelectorAll } from './deepQuery';
 import { setNativeValue } from './setNativeValue';
 import { containsTokens, normalizeForSignature } from '../signature';
 import { isUnavailable } from './isUnavailable';
+import { waitForCommitted } from './settle';
 
 /**
  * Drive an ARIA combobox / custom dropdown: open it (click, or type into the
@@ -16,7 +17,9 @@ export async function pickFromListbox(
   trigger: HTMLElement,
   targetText: string,
   timeoutMs = 3000,
+  signal?: AbortSignal,
 ): Promise<FillOutcome> {
+  if (signal?.aborted || !trigger.isConnected || isUnavailable(trigger)) return { ok: false, error: 'Fill cancelled or control unavailable' };
   if (trigger instanceof HTMLInputElement) {
     trigger.focus();
     setNativeValue(trigger, targetText);
@@ -24,11 +27,21 @@ export async function pickFromListbox(
     click(trigger);
   }
 
-  const option = await waitForBestOption(trigger, targetText, timeoutMs);
+  const option = await waitForBestOption(trigger, targetText, timeoutMs, signal);
   if (!option) return { ok: false, error: 'no matching option appeared' };
 
+  if (signal?.aborted || !trigger.isConnected || isUnavailable(trigger) || !option.isConnected || isUnavailable(option)) return { ok: false, error: 'Fill cancelled or control unavailable' };
+  const selectedText = option.textContent?.trim() ?? '';
   click(option);
-  return { ok: true, verifiedValue: option.textContent?.trim() ?? '' };
+  const committed = await waitForCommitted(() => {
+    if (!trigger.isConnected || isUnavailable(trigger)) return false;
+    const readback = normalizeForSignature(trigger instanceof HTMLInputElement ? trigger.value : trigger.textContent ?? '');
+    const matches = readback === normalizeForSignature(selectedText) || readback === normalizeForSignature(targetText);
+    // Typing into a typeahead already changes its value. Require evidence
+    // that activation committed its option as well as matching visible text.
+    return matches && (!(trigger instanceof HTMLInputElement) || option.getAttribute('aria-selected') === 'true' || !option.isConnected || trigger.getAttribute('aria-expanded') === 'false');
+  }, signal);
+  return committed ? { ok: true, verifiedValue: selectedText } : { ok: false, error: signal?.aborted ? 'Fill cancelled' : 'Option activation was not confirmed by the page' };
 }
 
 function click(el: HTMLElement): void {
@@ -38,16 +51,21 @@ function click(el: HTMLElement): void {
   }
 }
 
-function waitForBestOption(trigger: HTMLElement, targetText: string, timeoutMs: number): Promise<HTMLElement | null> {
+function waitForBestOption(trigger: HTMLElement, targetText: string, timeoutMs: number, signal?: AbortSignal): Promise<HTMLElement | null> {
   return new Promise((resolve) => {
     const deadline = Date.now() + timeoutMs;
 
     const attempt = (): boolean => {
+      if (signal?.aborted || !trigger.isConnected || isUnavailable(trigger)) {
+        cleanup(); resolve(null); return true;
+      }
       const ids = `${trigger.getAttribute('aria-controls') ?? ''} ${trigger.getAttribute('aria-owns') ?? ''}`.trim().split(/\s+/).filter(Boolean);
-      const root = trigger.getRootNode() as Document | ShadowRoot;
+      const root = trigger.getRootNode();
+      if (root !== trigger.ownerDocument && !(root instanceof ShadowRoot)) { cleanup(); resolve(null); return true; }
+      const ownerRoot = root as Document | ShadowRoot;
       // A mounted dropdown belonging to a different field must never win.
       const scopes: ParentNode[] = ids.length
-        ? ids.map((id) => root.getElementById(id) ?? document.getElementById(id)).filter((el): el is HTMLElement => el !== null)
+        ? ids.map((id) => ownerRoot.getElementById(id) ?? document.getElementById(id)).filter((el): el is HTMLElement => el !== null)
         : [document];
       const options = scopes.flatMap((scope) => deepQuerySelectorAll<HTMLElement>('[role="option"], [role="listbox"] li', scope))
         .filter((el) => !isUnavailable(el) && isVisibleOption(el));
@@ -81,7 +99,10 @@ function waitForBestOption(trigger: HTMLElement, targetText: string, timeoutMs: 
     const cleanup = () => {
       observer.disconnect();
       clearInterval(timer);
+      signal?.removeEventListener('abort', cancelled);
     };
+    const cancelled = () => { cleanup(); resolve(null); };
+    signal?.addEventListener('abort', cancelled, { once: true });
 
     observer.observe(document.documentElement, { childList: true, subtree: true });
     // Options may already be mounted.

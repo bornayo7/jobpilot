@@ -1,6 +1,7 @@
 import type { VersionRecord } from '@lib/storage/versions';
 import { getDocument } from '@lib/storage/documents';
 import { downloadFile, openInNewTab } from '@lib/util/download';
+import { useState } from 'react';
 
 /** Every approved resume and cover letter, newest first, with its rendered files. */
 export function VersionLibrary({
@@ -11,13 +12,13 @@ export function VersionLibrary({
 }: {
   versions: VersionRecord[];
   defaultResumeBlobId: string | null;
-  onSetDefault: (record: VersionRecord) => void;
-  onDelete: (record: VersionRecord) => void;
+  onSetDefault: (record: VersionRecord) => void | Promise<void>;
+  onDelete: (record: VersionRecord) => void | Promise<void>;
 }) {
-  if (versions.length === 0) return null;
   return (
     <section>
       <h2 className="gen-h">Version library</h2>
+      {versions.length === 0 && <p className="hint">Approved resumes and cover letters will appear here with their files.</p>}
       {versions.map((record) => (
         <VersionRow
           key={record.id}
@@ -39,9 +40,16 @@ function VersionRow({
 }: {
   record: VersionRecord;
   isDefault: boolean;
-  onSetDefault: () => void;
-  onDelete: () => void;
+  onSetDefault: () => void | Promise<void>;
+  onDelete: () => void | Promise<void>;
 }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const run = async (action: () => void | Promise<void>) => {
+    setBusy(true); setError('');
+    try { await action(); } catch (err) { setError(String(err)); }
+    finally { setBusy(false); }
+  };
   return (
     <div className="version-row">
       <div className="version-main">
@@ -51,11 +59,11 @@ function VersionRow({
         </span>
       </div>
       <div className="field-meta">
-        {record.pdfBlobId && <button onClick={() => void openStoredDocument(record.pdfBlobId!)}>Preview</button>}
-        {record.pdfBlobId && <button onClick={() => void downloadStoredDocument(record.pdfBlobId!)}>PDF</button>}
-        {record.docxBlobId && <button onClick={() => void downloadStoredDocument(record.docxBlobId!)}>DOCX</button>}
+        {record.pdfBlobId && <button disabled={busy} onClick={() => void run(() => openStoredDocument(record.pdfBlobId!))}>Preview</button>}
+        {record.pdfBlobId && <button disabled={busy} aria-label={`Download PDF of ${record.label}`} onClick={() => void run(() => downloadStoredDocument(record.pdfBlobId!))}>PDF</button>}
+        {record.docxBlobId && <button disabled={busy} aria-label={`Download DOCX of ${record.label}`} onClick={() => void run(() => downloadStoredDocument(record.docxBlobId!))}>DOCX</button>}
         {record.kind === 'coverLetter' && (
-          <button onClick={() => void navigator.clipboard.writeText((record.data as { text: string }).text)}>
+          <button disabled={busy} onClick={() => void run(() => navigator.clipboard.writeText((record.data as { text: string }).text))}>
             Copy text
           </button>
         )}
@@ -64,22 +72,25 @@ function VersionRow({
           (isDefault ? (
             <span className="chip ok">default</span>
           ) : (
-            <button onClick={onSetDefault}>Set default</button>
+            <button disabled={busy} onClick={() => void run(onSetDefault)}>Use as default</button>
           ))}
-        <button className="entry-remove" onClick={onDelete}>
-          ✕
+        <button disabled={busy} className="entry-remove" aria-label={`Delete ${record.label}`} onClick={() => void run(onDelete)}>
+          Delete
         </button>
       </div>
+      {error && <p role="alert" className="error-text">{error}</p>}
     </div>
   );
 }
 
 async function openStoredDocument(blobId: string): Promise<void> {
   const doc = await getDocument(blobId);
-  if (doc) openInNewTab(new Blob([doc.bytes], { type: doc.type }));
+  if (!doc) throw new Error('The saved file is missing. Remove this version or restore it from a backup.');
+  openInNewTab(new Blob([doc.bytes], { type: doc.type }));
 }
 
 async function downloadStoredDocument(blobId: string): Promise<void> {
   const doc = await getDocument(blobId);
-  if (doc) downloadFile(new Blob([doc.bytes], { type: doc.type }), doc.name);
+  if (!doc) throw new Error('The saved file is missing. Remove this version or restore it from a backup.');
+  downloadFile(new Blob([doc.bytes], { type: doc.type }), doc.name);
 }

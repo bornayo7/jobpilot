@@ -5,20 +5,26 @@ import {
   PANEL_PORT,
   type BgToPanel,
   type FillInstruction,
+  type FillProvenance,
   type FillResult,
   type FormFieldDescriptor,
   type PanelToBg,
   type SerializedFile,
 } from '@lib/messaging/protocol';
 import type { AtsId } from '@lib/fill/adapters/detect';
+import { FillRuns } from '@lib/messaging/fillRuns';
+import { SiteRegistrations } from '@lib/messaging/siteRegistrations';
+import type { SiteTarget } from '@lib/content/registerSite';
 
 export interface FrameState {
+  documentId: string;
   atsId: AtsId | null;
   url: string;
   fields: FormFieldDescriptor[];
 }
 
 export interface PanelState {
+  trackerNotice?: string;
   tabId: number | null;
   tabUrl: string;
   /** frameId -> frame state, for the attached tab. */
@@ -46,9 +52,20 @@ const emptyState = (): PanelState => ({
 export function useBackgroundPort() {
   const [state, setState] = useState<PanelState>(emptyState);
   const portRef = useRef<Browser.runtime.Port | null>(null);
+  const runs = useRef<FillRuns | null>(null);
+  const registrations = useRef<SiteRegistrations | null>(null);
+  registrations.current ??= new SiteRegistrations((message) => {
+    if (!portRef.current) throw new Error('The extension is reconnecting. Try again shortly.');
+    portRef.current.postMessage(message);
+  });
+  runs.current ??= new FillRuns((message) => {
+    if (!portRef.current) throw new Error('The extension is reconnecting. Try again shortly.');
+    portRef.current.postMessage(message);
+  });
 
   useEffect(() => {
     let disposed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
     const connect = () => {
       if (disposed) return;
@@ -56,19 +73,27 @@ export function useBackgroundPort() {
       portRef.current = port;
 
       port.onMessage.addListener((raw) => {
+        if (disposed || portRef.current !== port) return;
         const msg = raw as BgToPanel;
+        registrations.current!.accept(msg);
+        const currentResult = runs.current!.accept(msg);
+        if (msg.t === 'bg/frameEvent' && msg.event.t === 'cs/fillResults' && !currentResult) return;
         setState((prev) => reduce(prev, msg));
       });
 
       port.onDisconnect.addListener(() => {
+        if (disposed || portRef.current !== port) return;
         portRef.current = null;
-        if (!disposed) setTimeout(connect, 400);
+        runs.current!.cancelAll();
+        registrations.current!.cancelAll();
+        reconnectTimer = setTimeout(connect, 400);
       });
 
       // Attach with this panel's window so the hub only follows tab switches
       // inside it. windows.getCurrent() is async; if the port died meanwhile
       // the reconnect path attaches again, so a failed post is fine to drop.
       const attach = (windowId?: number) => {
+        if (disposed || portRef.current !== port) return;
         try {
           port.postMessage({
             t: 'panel/attach',
@@ -88,7 +113,10 @@ export function useBackgroundPort() {
     connect();
     return () => {
       disposed = true;
-      portRef.current?.disconnect();
+      clearTimeout(reconnectTimer);
+      runs.current!.cancelAll('The panel closed');
+      registrations.current!.cancelAll();
+      const port = portRef.current; portRef.current = null; port?.disconnect();
     };
   }, []);
 
@@ -100,14 +128,9 @@ export function useBackgroundPort() {
       scan(tabId: number) {
         portRef.current?.postMessage({ t: 'panel/scan', tabId } satisfies PanelToBg);
       },
-      execute(tabId: number, frameId: number, instructions: FillInstruction[], files?: SerializedFile[]) {
-        portRef.current?.postMessage({
-          t: 'panel/execute',
-          tabId,
-          frameId,
-          instructions,
-          files,
-        } satisfies PanelToBg);
+      registerSite(target: SiteTarget) { return registrations.current!.register(target); },
+      execute(tabId: number, frameId: number, documentId: string, instructions: FillInstruction[], files?: SerializedFile[], provenance?: FillProvenance, signal?: AbortSignal) {
+        return runs.current!.execute({ tabId, frameId, documentId, instructions, files, provenance }, signal);
       },
       highlight(tabId: number, frameId: number, fieldId: string) {
         portRef.current?.postMessage({ t: 'panel/highlight', tabId, frameId, fieldId } satisfies PanelToBg);
@@ -128,6 +151,9 @@ export type PanelActions = ReturnType<typeof useBackgroundPort>['actions'];
 
 export function reduce(prev: PanelState, msg: BgToPanel): PanelState {
   switch (msg.t) {
+    case 'bg/siteRegistered': return prev;
+    case 'bg/runFailed': return prev;
+    case 'bg/trackerStatus': return msg.tabId === prev.tabId ? { ...prev, trackerNotice: msg.message } : prev;
     case 'bg/tabChanged': {
       if (!msg.reset && msg.tabId === prev.tabId && (!msg.url || msg.url === prev.tabUrl)) {
         return { ...prev, tabUrl: msg.url || prev.tabUrl };
@@ -144,8 +170,9 @@ export function reduce(prev: PanelState, msg: BgToPanel): PanelState {
     case 'bg/frameEvent': {
       if (msg.tabId !== prev.tabId) return prev;
       const frames = new Map(prev.frames);
-      const frame: FrameState = frames.get(msg.frameId) ?? { atsId: null, url: '', fields: [] };
+      const frame: FrameState = frames.get(msg.frameId) ?? { documentId: '', atsId: null, url: '', fields: [] };
       const event = msg.event;
+      if (event.t !== 'cs/ready' && event.documentId !== frame.documentId) return prev;
       switch (event.t) {
         case 'cs/ready': {
           // The top frame reporting a different URL is a navigation, full or
@@ -153,9 +180,9 @@ export function reduce(prev: PanelState, msg: BgToPanel): PanelState {
           // old page; carrying them over left the Generate tab building
           // prompts for the previous posting.
           const navigated = msg.frameId === 0 && !!event.url && !!prev.tabUrl && event.url !== prev.tabUrl;
-          const frameNavigated = !!frame.url && frame.url !== event.url;
+          const frameNavigated = !!frame.documentId && frame.documentId !== event.documentId || !!frame.url && frame.url !== event.url;
           if (navigated) frames.clear();
-          frames.set(msg.frameId, { ...frame, atsId: event.atsId, url: event.url, fields: navigated || frameNavigated ? [] : frame.fields });
+          frames.set(msg.frameId, { ...frame, documentId: event.documentId, atsId: event.atsId, url: event.url, fields: navigated || frameNavigated ? [] : frame.fields });
           return {
             ...prev,
             frames,

@@ -1,7 +1,12 @@
 import type { CardProps } from './fields';
+import { useEffect, useState } from 'react';
 
 export function SkillsCard({ profile, update }: CardProps) {
   const skillsText = profile.skills.map((s) => (s.category ? `${s.name} [${s.category}]` : s.name)).join(', ');
+  const [text, setText] = useState(skillsText);
+  useEffect(() => {
+    if (JSON.stringify(parseSkills(text)) !== JSON.stringify(profile.skills)) setText(skillsText);
+  }, [skillsText, profile.skills, text]);
   return (
     <section className="card">
       <h2>Skills</h2>
@@ -9,15 +14,9 @@ export function SkillsCard({ profile, update }: CardProps) {
       <label className="field">
         Skills
         <textarea
-          // Uncontrolled (commits on blur) so typing isn't re-parsed per
-          // keystroke — but keyed on the stored value so a profile switch or a
-          // resume import remounts it. Without the key the box kept showing the
-          // previous profile's skills and blurring wrote them back over the new
-          // ones.
-          key={skillsText}
           rows={3}
-          defaultValue={skillsText}
-          onBlur={(e) => update({ skills: parseSkills(e.target.value) })}
+          value={text}
+          onChange={(e) => { setText(e.target.value); update({ skills: parseSkills(e.target.value) }); }}
         />
       </label>
     </section>

@@ -42,6 +42,7 @@ export type FillSource = 'adapter' | 'heuristic' | 'cache' | 'llm' | 'user';
 /** Files cross runtime ports as base64 — port messages are JSON-serialized,
  *  so ArrayBuffers would silently arrive empty. */
 export interface SerializedFile {
+  blobKey?: string;
   name: string;
   type: string;
   dataBase64: string;
@@ -73,26 +74,37 @@ export type FillResult = FillOutcome & { fieldId: string };
 export interface CapturedAnswer {
   label: string;
   value: string;
+  sensitive?: boolean;
+}
+
+export interface FillProvenance {
+  profileId?: string;
+  profileRevision?: number;
+  resumeName?: string;
+  resumeVersionId?: string;
 }
 
 /** Content script → background. */
-export type CsToBg =
+export type CsEvent =
   | { t: 'cs/ready'; atsId: AtsId | null; url: string }
   | { t: 'cs/fields'; fields: FormFieldDescriptor[] }
-  | { t: 'cs/fillResults'; results: FillResult[] }
+  | { t: 'cs/fillResults'; runId: string; results: FillResult[] }
   /** User activated a submit-looking control — answers snapshotted NOW,
    *  before navigation destroys the form. */
-  | { t: 'cs/submitAttempt'; url: string; title: string; answers: CapturedAnswer[] }
+  | { t: 'cs/submitAttempt'; url: string; title: string; answers: CapturedAnswer[]; provenance?: FillProvenance }
   /** A confirmation page/modal appeared — the application really went through. */
   | { t: 'cs/submitDetected'; url: string; title: string; confirmationText: string }
   /** The element the user right-clicked resolves to this field. */
   | { t: 'cs/contextField'; fieldId: string }
   | { t: 'cs/jdText'; text: string; title: string };
 
+export type CsToBg = CsEvent & { documentId: string };
+
 /** Background → content script. */
 export type BgToCs =
   | { t: 'bg/scan' }
-  | { t: 'bg/execute'; instructions: FillInstruction[]; files?: SerializedFile[] }
+  | { t: 'bg/execute'; documentId: string; runId: string; instructions: FillInstruction[]; files?: SerializedFile[]; provenance?: FillProvenance }
+  | { t: 'bg/cancel'; documentId: string; runId: string }
   | { t: 'bg/highlight'; fieldId: string }
   | { t: 'bg/extractJd' }
   /** Resolve the last right-clicked element to a discovered field. */
@@ -104,17 +116,21 @@ export type PanelToBg =
    *  repoint it (side panels are per-window). */
   | { t: 'panel/attach'; tabId: number | null; windowId?: number }
   | { t: 'panel/scan'; tabId: number }
-  | { t: 'panel/execute'; tabId: number; frameId: number; instructions: FillInstruction[]; files?: SerializedFile[] }
+  | { t: 'panel/execute'; tabId: number; frameId: number; documentId: string; runId: string; instructions: FillInstruction[]; files?: SerializedFile[]; provenance?: FillProvenance }
+  | { t: 'panel/cancel'; tabId: number; frameId: number; documentId: string; runId: string }
   | { t: 'panel/highlight'; tabId: number; frameId: number; fieldId: string }
   | { t: 'panel/extractJd'; tabId: number }
   /** Persist content-script injection for a user-enabled origin (permission
    *  must already be granted by the panel — the gesture lives there). */
-  | { t: 'panel/registerSite'; origin: string; tabId: number };
+  | { t: 'panel/registerSite'; requestId: string; origin: string; tabId: number; url: string };
 
 /** Background → side panel. */
 export type BgToPanel =
+  | { t: 'bg/siteRegistered'; requestId: string; error?: string }
   | { t: 'bg/frameEvent'; tabId: number; frameId: number; event: CsToBg }
   | { t: 'bg/frameGone'; tabId: number; frameId: number }
+  | { t: 'bg/runFailed'; runId: string; error: string }
+  | { t: 'bg/trackerStatus'; tabId: number; message: string }
   | { t: 'bg/tabChanged'; tabId: number; url: string; reset?: boolean };
 
 export const CS_PORT = 'jobpilot-cs';
