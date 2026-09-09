@@ -1,0 +1,946 @@
+{
+  "reviewedAt": "2026-09-09",
+  "sourceCommit": "c73bd2cf97d00902f1a258cbf070ab943657b29c",
+  "baseCommit": "2315bdd752cec4dcdcc661ffd4bc630df62bbc51",
+  "authoredFiles": 132,
+  "authoredLines": 11432,
+  "coverageByReviewer": {
+    "root": 7,
+    "fill": 39,
+    "ui": 37,
+    "storage-generation": 49
+  },
+  "method": "Full source and test reads divided across four reviewers; full branch diffs and eleven commit messages. Counts exclude generated lockfile and review artifacts. AGENTS.md read separately, not tracked.",
+  "generatedLockfile": {
+    "path": "package-lock.json",
+    "method": "Parsed complete JSON dependency graph, npm audit",
+    "packages": 360,
+    "sha256": "81cacb527e4c3c86a246bd31c70135de4b0fdf7dd2b9e2db82c3a603a2f4c316"
+  },
+  "files": [
+    {
+      "path": ".gitignore",
+      "reviewer": "root",
+      "read": "complete",
+      "lines": 9,
+      "sha256": "342f815183eca3a8345203dec9d0a5c6e545796e906599773dec21f2b734d055"
+    },
+    {
+      "path": "AUDIT.md",
+      "reviewer": "root",
+      "read": "complete",
+      "lines": 43,
+      "sha256": "aea93bdffb59912b3f9c7aded896a1ad9090debfd31e2daa79fa2f82b7bcd5d9"
+    },
+    {
+      "path": "README.md",
+      "reviewer": "root",
+      "read": "complete",
+      "lines": 193,
+      "sha256": "7020fb2e54ce24f7ca107626b0a605ff2e69896fe28dffdfc752d675df35d4bd"
+    },
+    {
+      "path": "entrypoints/ats.content.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 205,
+      "sha256": "209db9e320abf75c684fff60711eb10bf0c97e61fb2d6b1bb638210885380b16"
+    },
+    {
+      "path": "entrypoints/background.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 227,
+      "sha256": "c6fa9280db64f6423985ebb58e3bb53b44cbaa904ae05b75e49c85f371bafdee"
+    },
+    {
+      "path": "entrypoints/options/OptionsApp.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 119,
+      "sha256": "ffdc34f4dc146b983b16dea289956f1eaad5768ffbc437a72f350bf97b220ce6"
+    },
+    {
+      "path": "entrypoints/options/index.html",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 13,
+      "sha256": "b5e25a3342ecd6ed013da0d589edf3a603902722ff2dac41cacee9be5075c657"
+    },
+    {
+      "path": "entrypoints/options/main.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 11,
+      "sha256": "23e9659a96fd5b0c1de5566e5080865c9a86fbc7c796af8392f8dc09a922a4bf"
+    },
+    {
+      "path": "entrypoints/options/options.css",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 168,
+      "sha256": "b8d420f09e866d03d1ad5fefd3593e52d02687e2a7287f847df59ad197e6ed0d"
+    },
+    {
+      "path": "entrypoints/sidepanel/App.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 51,
+      "sha256": "49bd259a1683aca07ce7bbebd6f3d1e73e3d4ddca4ac7fb6e4f9230dfbb6e1b9"
+    },
+    {
+      "path": "entrypoints/sidepanel/index.html",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 12,
+      "sha256": "c11f6af45d03c4ce765cd788d2b280b13f299be9ee11fefc5a564649a0ef0f56"
+    },
+    {
+      "path": "entrypoints/sidepanel/main.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 10,
+      "sha256": "28f60f29ce43e14e9f735ed51aed0641f85c7f1fb471a2d0edb9c08bd5048747"
+    },
+    {
+      "path": "entrypoints/sidepanel/style.css",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 583,
+      "sha256": "f2de3c90506a9b76b9aab3eaa7b7916e5c5557e3274442cbb0da554b79861a8f"
+    },
+    {
+      "path": "package.json",
+      "reviewer": "root",
+      "read": "complete",
+      "lines": 36,
+      "sha256": "d09fec623bb0393b91b36bd7fbd36b1026f262916277378c7355f025ebbefec9"
+    },
+    {
+      "path": "src/components/AnswersTab.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 148,
+      "sha256": "a72c42f0c12e6bb3c73908c6b465ecb0d151c1e6184dab7dd3219c1df171b6fe"
+    },
+    {
+      "path": "src/components/BackupCard.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 90,
+      "sha256": "f5c14d1ab46b3cb2d5e780991c7220f24f7405c69ef07676e078e51396cd81ec"
+    },
+    {
+      "path": "src/components/CommaListInput.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 50,
+      "sha256": "f2d0cfc34e4409c2e1bbf24eac9a1135fc8955ff3deeb25fb16089839ec07a55"
+    },
+    {
+      "path": "src/components/FillTab.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 224,
+      "sha256": "ad60285bf38950550813ea804ae5986dd3c19dd51e2fb18b560170457badbf66"
+    },
+    {
+      "path": "src/components/FramePlanView.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 180,
+      "sha256": "4d503c52f504d36ffc21d200317fc5b389e9f9ddd9e64a5b5ce42f656be92669"
+    },
+    {
+      "path": "src/components/GenerateTab.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 365,
+      "sha256": "f0ec9ec648a6b1f0a32bcb14d6ce91f673dd0f60925e1e586d50fd0d2cceee6f"
+    },
+    {
+      "path": "src/components/ProfileSwitcher.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 70,
+      "sha256": "4543733355a5c6b688ed8386bbe0b5c11055750a6746af2ea9b8fbb09ab11301"
+    },
+    {
+      "path": "src/components/ResumeReview.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 62,
+      "sha256": "d2e9c90e7873d96409230ad050de768d8b0b4e7ef17a8578bde0d28c74a9fb99"
+    },
+    {
+      "path": "src/components/SettingsTab.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 266,
+      "sha256": "9a22961963c8cba606cf31879e2aff599b46118c66034c6deef22cadda393998"
+    },
+    {
+      "path": "src/components/TrackerTab.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 218,
+      "sha256": "32d5717f4f8169ac0e03b3a05bc68f0241a6a9cba73a7391ade20012b5df5afc"
+    },
+    {
+      "path": "src/components/VersionLibrary.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 85,
+      "sha256": "b64393c10f15e4243b7ecb6f6bf081e105cb761e7b9b1c0c9e8b89ba9fae0014"
+    },
+    {
+      "path": "src/components/profile/BasicsCard.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 26,
+      "sha256": "ad984a9096a632dc6b34cbaac726d30997e7a4079c1b50229f04a838a3c8da3a"
+    },
+    {
+      "path": "src/components/profile/DocumentsCard.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 74,
+      "sha256": "0bc4ee2b737c60bdecaa3c68a4e3b3b1f0797a9685fbb23ddb08ad619b44f7d4"
+    },
+    {
+      "path": "src/components/profile/EducationCard.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 30,
+      "sha256": "78bc213267a55e2867c7ae7d972050f8ccc49d77052e46be110d9cfa4fbeb8aa"
+    },
+    {
+      "path": "src/components/profile/EeoCard.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 23,
+      "sha256": "3547a5d08565c696b5497b303f0cd7d0d9636afaf1cf98b7e66c17ca096c832d"
+    },
+    {
+      "path": "src/components/profile/ImportProfileCard.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 92,
+      "sha256": "8babf9c1b82dd8e7ab7456eeda03ee8a8462efc78507c3d464703db34a89038b"
+    },
+    {
+      "path": "src/components/profile/LinksCard.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 17,
+      "sha256": "a58f999a64bed5461f6dad94f533cffe2f99968f58ffb2a1ed4441433be0c44f"
+    },
+    {
+      "path": "src/components/profile/PreferencesCard.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 16,
+      "sha256": "45fee26115544f666f574986cbf5128bc5c82f78017409857a1929eb2742299d"
+    },
+    {
+      "path": "src/components/profile/ProjectsCard.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 35,
+      "sha256": "078172f849f5ac659a3b9af26623b9ebe47a27f591502067274c33d6b662a8dc"
+    },
+    {
+      "path": "src/components/profile/SkillsCard.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 37,
+      "sha256": "585cb300b40c8d2a20bc08aa59c5909dcc167e8236660e4777796945cc4ead53"
+    },
+    {
+      "path": "src/components/profile/WorkAuthCard.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 32,
+      "sha256": "e434264ce931c252d2aa49e8abc17dc43d302fbb79f354a3733698fe4aefa380"
+    },
+    {
+      "path": "src/components/profile/WorkCard.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 46,
+      "sha256": "47e1ad95170e1a8e56eb996f69046bf655261301e76e3463962c37aae0870586"
+    },
+    {
+      "path": "src/components/profile/fields.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 81,
+      "sha256": "38d6749f90892ab3d0f3b1dc0e9590d5037e62864c064a96af5b953a46cc6c40"
+    },
+    {
+      "path": "src/hooks/useBackgroundPort.ts",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 188,
+      "sha256": "3a8fc8fb3026094cdce447891daaca2e6ab6e6971b2653fa96b2c6a28f63bff5"
+    },
+    {
+      "path": "src/hooks/useFillPlan.ts",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 240,
+      "sha256": "d8faf5b178434bdc3a4f762c68885bf9e26c51f4eb8f68830d1a15f0d4daf460"
+    },
+    {
+      "path": "src/hooks/useStores.ts",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 37,
+      "sha256": "cf672da6172d5a2ff0481b28df36bd052bebad10137904ab0d1834e05456ba5b"
+    },
+    {
+      "path": "src/lib/fill/adapters/ashby.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 25,
+      "sha256": "b2ec79430e288404cb823a4158aa5c5e61ef1f1c4b69e6e0da0013893488f7b8"
+    },
+    {
+      "path": "src/lib/fill/adapters/detect.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 43,
+      "sha256": "bc27e9ee4ccb584ab32657ca34b3d3216ab8ba6e8079c90152f3af0527ac3f27"
+    },
+    {
+      "path": "src/lib/fill/adapters/greenhouse.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 94,
+      "sha256": "c84e6e888225e8480df632a7cc6ae7d01fb21935f301f1c9b447411309ed302c"
+    },
+    {
+      "path": "src/lib/fill/adapters/index.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 17,
+      "sha256": "945b40b7eacaea491fce082c8bf49a5573913d27a9f0ca35efb9093b76aba424"
+    },
+    {
+      "path": "src/lib/fill/adapters/lever.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 31,
+      "sha256": "6ef2cfd25a146c3af1362afe9ccb3497bc1757595c3459e8a6aed65e6b6d6884"
+    },
+    {
+      "path": "src/lib/fill/adapters/types.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 29,
+      "sha256": "c842e51e2da1ca04b6619a6fbd64751dc7032133b0dc89f2a664c0145c36e06d"
+    },
+    {
+      "path": "src/lib/fill/captureAnswers.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 43,
+      "sha256": "4feeea1e93a637eed9cfaa78616a64b6eb160266602e5a6ce0e5705067a2490b"
+    },
+    {
+      "path": "src/lib/fill/discovery.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 224,
+      "sha256": "ef03a811a523d899faf2a05a4e115e4963b9b89bea6f95b7ba43f13efa613c75"
+    },
+    {
+      "path": "src/lib/fill/dom/attachFile.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 17,
+      "sha256": "53ded0bc54e70bc601c07c2f38786e51862a660b83a2e75def6597c6e58cbc6c"
+    },
+    {
+      "path": "src/lib/fill/dom/deepQuery.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 21,
+      "sha256": "aaaa4b489a7cc0ee51fad622f453a5be5bf29965da23b27d5d86e85b1cc8de3f"
+    },
+    {
+      "path": "src/lib/fill/dom/highlight.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 15,
+      "sha256": "fd13da3378c01a85e46c664feb005bd1af350aad087bc17778e8f80ff1d971c6"
+    },
+    {
+      "path": "src/lib/fill/dom/isUnavailable.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 15,
+      "sha256": "d0ba26c8c3149ecadc6c60310c15ec326c6e4686c33fb117735905aea6ff95af"
+    },
+    {
+      "path": "src/lib/fill/dom/labelFor.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 75,
+      "sha256": "e3e64d17059d39b68b31364ad431ba8ff014bf09fbcedd7527a8ab11ac5842fa"
+    },
+    {
+      "path": "src/lib/fill/dom/pickFromListbox.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 118,
+      "sha256": "df3277baba2c32c57afe604a1b93763c0c617efdfbe79691bf45a6ec7bb6133d"
+    },
+    {
+      "path": "src/lib/fill/dom/radioGroup.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 120,
+      "sha256": "e873acdde7f9c69024a2c275afdd3d530da9f216fa38c026b3c252a3d4226523"
+    },
+    {
+      "path": "src/lib/fill/dom/setNativeValue.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 49,
+      "sha256": "ceb2612c5080bdee2d42a9e7f689f286721517b129e93af39d554b632524a4c7"
+    },
+    {
+      "path": "src/lib/fill/executor.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 121,
+      "sha256": "f1858eacd9e2b31db43622c7c6e64c51ff83edbff2dd65062eddd7f288dd6fbb"
+    },
+    {
+      "path": "src/lib/fill/heuristics.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 92,
+      "sha256": "1639da331d1c664290368951d9bd83a64d054280eb729924896cf9ca1003109e"
+    },
+    {
+      "path": "src/lib/fill/resolver.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 230,
+      "sha256": "2a8b72a8322c12881cd33ff6eac03f574b43d9290b2cc8eff534dc646a963281"
+    },
+    {
+      "path": "src/lib/fill/signature.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 55,
+      "sha256": "f4869e74845843b428ee94c35de8ce0cb2704f9c088d89f3aa0c02f838fc2612"
+    },
+    {
+      "path": "src/lib/fill/valueFor.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 107,
+      "sha256": "c32729eaa2ecf452188bef76d6c6d184662a654490d0faa45a27d17a55beb388"
+    },
+    {
+      "path": "src/lib/generation/importProfile.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 125,
+      "sha256": "bff299b1dc72fcb0cda4ed1639a01997563a7f96e0cf739be9bd32ace86a7d41"
+    },
+    {
+      "path": "src/lib/generation/importResult.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 105,
+      "sha256": "83bc79c337958a6952c9de482eddfb0e08196a16427102809810e7c1547fcf61"
+    },
+    {
+      "path": "src/lib/generation/renderCoverLetterPdf.tsx",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 56,
+      "sha256": "c60031caf916c827f99a0f5f90344208e4f3832a171a8a3282b8b8f86dda5154"
+    },
+    {
+      "path": "src/lib/generation/renderDocx.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 156,
+      "sha256": "48c1389057b7dba43a6ceae2318459b171f847486e1985b82954ac0834f39ac2"
+    },
+    {
+      "path": "src/lib/generation/renderPdf.tsx",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 149,
+      "sha256": "5b4254c9e502158f49bdfe9d36fb64da3bd44695297355488018b8e6c8f22e18"
+    },
+    {
+      "path": "src/lib/generation/renderToBytes.tsx",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 28,
+      "sha256": "ab90f3a7014eb20095f3b164b1525a8c0d337b14fb46e676992988dd218fdabd"
+    },
+    {
+      "path": "src/lib/generation/storeVersion.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 73,
+      "sha256": "c80e9688b7c0a113139318a14e4b0141396f1a4718ae7a258a63ad9460487b05"
+    },
+    {
+      "path": "src/lib/generation/validatePdf.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 109,
+      "sha256": "e3da951eb58d6f509b9b38bd605e10ba01532402a1b6a9b23e3e1c5901a90bc6"
+    },
+    {
+      "path": "src/lib/memory/answers.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 72,
+      "sha256": "93f871c618f8e7587651e03685b1651cfc762518384abb26ddef7497407481ac"
+    },
+    {
+      "path": "src/lib/memory/dealbreakers.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 91,
+      "sha256": "eeb9cca0e89522dae242fef9326ac6a97fcf3b571a134cf7392237d4397e456b"
+    },
+    {
+      "path": "src/lib/memory/matchGap.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 77,
+      "sha256": "2228f6407906ded979760f2bc0ed640f85a799ed558169f77d29db95675450b9"
+    },
+    {
+      "path": "src/lib/messaging/protocol.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 121,
+      "sha256": "9d4f7d7e3c521f368f207ae992f93d569c0ef645353740bb96a4ad5c055ea69f"
+    },
+    {
+      "path": "src/lib/prompts/fieldMapping.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 88,
+      "sha256": "367e1b8e458d7e6a6451e281e1d4007bc536f0b6a34c873979b350d56c425758"
+    },
+    {
+      "path": "src/lib/prompts/promptStudio/builders.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 191,
+      "sha256": "5e632884fdfe0585582250bca5c06c131f3b537de44af042b9efc1cf7e6adf39"
+    },
+    {
+      "path": "src/lib/prompts/promptStudio/humanize.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 30,
+      "sha256": "b5d2f4c465a267f548b6f56f958deaebaa3009699c268763e952adad47d0054e"
+    },
+    {
+      "path": "src/lib/providers/anthropic.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 112,
+      "sha256": "20f576aa67275a5e1ce476991cf6842fb7292b93999d3b838c3f3278aa942b08"
+    },
+    {
+      "path": "src/lib/providers/ollama.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 24,
+      "sha256": "069a61911520f2a0852d7469e391e4336b7fc130400a9c014dfae2f728007aa2"
+    },
+    {
+      "path": "src/lib/providers/openaiCompatible.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 96,
+      "sha256": "9045aed5edbb3a83091bf9f3516b1a223c24901483b8ee4f8abc3e8a0598bad5"
+    },
+    {
+      "path": "src/lib/providers/router.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 71,
+      "sha256": "e90ff004f9aecef0e0f44913f719f348f3ee3bb5ea8ec8c835c2ccafde66c83a"
+    },
+    {
+      "path": "src/lib/providers/sse.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 54,
+      "sha256": "d0b347ce18c983fe9e6fd83e72bc66c6c72389515e8bef9bbd9d2245c9916b6e"
+    },
+    {
+      "path": "src/lib/providers/types.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 48,
+      "sha256": "18e4fe3b5890810b3d8e310136c10282715841a3b50d8ed11dfd2e1f4aa0ca81"
+    },
+    {
+      "path": "src/lib/schema/fieldKind.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 137,
+      "sha256": "07cae0ecca5d16678b3b094175839260e9361490aac8d9bd5c9688bc6d0b80f7"
+    },
+    {
+      "path": "src/lib/schema/migrations.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 57,
+      "sha256": "6d3609caefb6a6d9db5a95a4c9a9975ad872725b37a11cdfaf3d99b64d6b6ca4"
+    },
+    {
+      "path": "src/lib/schema/profile.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 124,
+      "sha256": "b75ae9fcc4f8fadbfd8de84765ef069342b0a6d9cd946ab3a397fbc01b13b6bd"
+    },
+    {
+      "path": "src/lib/schema/resumeVersion.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 91,
+      "sha256": "cdea8cb909a555a566c1ef72c1295142eb480e485a43270894529ca6c4e1aebf"
+    },
+    {
+      "path": "src/lib/storage/backupStore.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 146,
+      "sha256": "41df0530e219a095af26fc456bd8e2e34d9b09393c5a660cf186dc02f2025ded"
+    },
+    {
+      "path": "src/lib/storage/db.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 106,
+      "sha256": "a80ceaced14d0e5b5bd51a7a46eb84eb0fb25377979b2984fd4699b0885108ce"
+    },
+    {
+      "path": "src/lib/storage/documents.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 58,
+      "sha256": "04372df9c18b20b00cdc6e29b40e026a2cef01b43ab851d122763291d454752f"
+    },
+    {
+      "path": "src/lib/storage/mappingCache.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 99,
+      "sha256": "22b402a63e5287409adf2fd1b6110063cf8bbc801b653beb639c092a94f42ef2"
+    },
+    {
+      "path": "src/lib/storage/profileStore.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 127,
+      "sha256": "2fc7d2a8758fec333c5134da8aef9d0d7689adf96c086695ea8278483257e75f"
+    },
+    {
+      "path": "src/lib/storage/settingsStore.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 73,
+      "sha256": "5b33684951aef1906c625f353904170e7dd9b6bf2eac735ffb0c2630f08a1fcf"
+    },
+    {
+      "path": "src/lib/storage/unmatchedLog.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 34,
+      "sha256": "adb40873ec4a2c1f42f83465b369ef9c78a4bfeca48df445949e6f1ba30afd73"
+    },
+    {
+      "path": "src/lib/storage/versions.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 34,
+      "sha256": "d13eba1b2464a2ddc0ac360cb5b01bf006f2a91f41659eb3938394cd1a543296"
+    },
+    {
+      "path": "src/lib/tracker/detect.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 73,
+      "sha256": "fec12645c7512a6c2c7e8aecb69edf8ecf3ea21d60c7ae9b58a32b1ac962342c"
+    },
+    {
+      "path": "src/lib/tracker/store.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 63,
+      "sha256": "256b4b178d8bd21db1a70d4763a71931433173c4418f9a0fe1f728a4ad62716a"
+    },
+    {
+      "path": "src/lib/tracker/submissions.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 91,
+      "sha256": "38367fea29c3391246f8c62ab991711799898e7e1c26bd43a6871f2ebf601e56"
+    },
+    {
+      "path": "src/lib/util/backup.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 74,
+      "sha256": "37e3c9cf8d986ca2826f437c1580d594d1c59d316d355391686984c1ab4d07bd"
+    },
+    {
+      "path": "src/lib/util/base64.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 19,
+      "sha256": "a36f729753a2a94dc60fe4f1de0994a6e4a5b514f52cf377dad877ed1027b292"
+    },
+    {
+      "path": "src/lib/util/download.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 28,
+      "sha256": "1505db38ab48aac72581a6d6677b5c71eeb6a4f74f8d66cf8b99f98a7e0d2511"
+    },
+    {
+      "path": "src/lib/util/fuzzy.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 46,
+      "sha256": "6a88a1cca274dc3cb02c3979715cc84a56bb3ad595d4f4a4a7b45df1d21d8870"
+    },
+    {
+      "path": "tests/unit/answers.test.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 57,
+      "sha256": "090bb83fa6fc91878e8e0ae49569e7102d3dee82051308626f756ef08addb375"
+    },
+    {
+      "path": "tests/unit/backup.test.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 34,
+      "sha256": "257d6de4a021ee8c27c7614db0ff05a38bc1681fbde9df5414d952bf09f7471b"
+    },
+    {
+      "path": "tests/unit/backupStore.test.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 70,
+      "sha256": "d53944389782e7370ec0d2ca39604bf1f298e9c6cd27904a2fbd58ced4c25578"
+    },
+    {
+      "path": "tests/unit/dealbreakers.test.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 70,
+      "sha256": "e6217846ce25f60aa92cf6d4e0036b1ac00d03b771da8371ecf88937c732056a"
+    },
+    {
+      "path": "tests/unit/detect.test.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 26,
+      "sha256": "6e566661a0db906e517e162552b933243eb18dfcdc14780cba8e0340dc9cb366"
+    },
+    {
+      "path": "tests/unit/discovery.test.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 141,
+      "sha256": "c7a0bcd450015db3d8ee012136a9bd1191fb50c93151b8f03e8842193fa25574"
+    },
+    {
+      "path": "tests/unit/executor.test.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 110,
+      "sha256": "e99794e51e64498de5b7822cd8e03472847fdc70c804fa8d3a86dfbf95c08aaa"
+    },
+    {
+      "path": "tests/unit/generateReview.test.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 73,
+      "sha256": "d58a7137bb2b87c43a6beb8e2f4c8b1e1655a555f4659a8b34e38d04ebc8f81c"
+    },
+    {
+      "path": "tests/unit/greenhouse.test.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 94,
+      "sha256": "f4eec811430a394e529027aba7096e40585632d777d0aac55891ad0b8349b85a"
+    },
+    {
+      "path": "tests/unit/heuristics.test.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 63,
+      "sha256": "2ad31aa222294217b1b798428ed84bacebe8620ab9dddb4dc57be034e9560475"
+    },
+    {
+      "path": "tests/unit/importProfile.test.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 100,
+      "sha256": "ff62c140e92b83d89ed83696b8e80ea4128afb83b251284e36a2fd75fe8204d4"
+    },
+    {
+      "path": "tests/unit/importResult.test.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 84,
+      "sha256": "f562173407eadbeb983874a2990e4b4db42eafa38876f4c4e9e122c51e4e2a76"
+    },
+    {
+      "path": "tests/unit/listbox.test.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 34,
+      "sha256": "e011dd7a671f9bd58240115400ea960ac2e0da0fd8fe0650b21282adcf227f95"
+    },
+    {
+      "path": "tests/unit/mappingCache.test.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 61,
+      "sha256": "2520e06f46d1586fa6df2e05210ef8eaad4ee1dc1e5685c08893c998e0abc380"
+    },
+    {
+      "path": "tests/unit/matchGap.test.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 46,
+      "sha256": "3a9cd6c0f4d057229f416a7fbe4b4f18315936ddbc01688bf094fed3ccae2e9c"
+    },
+    {
+      "path": "tests/unit/migrations.test.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 64,
+      "sha256": "3d8b379afc6d1aeeabf0c467183ed53ba2ccde910f41330d8a95179e897d28c1"
+    },
+    {
+      "path": "tests/unit/panelState.test.ts",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 33,
+      "sha256": "14a62b645cae47e2615955314791a8750473c5bac85e3cc958188010f6a39a12"
+    },
+    {
+      "path": "tests/unit/pdfOwnership.test.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 26,
+      "sha256": "6426ec633fa266b74421c1c49bbe2892f3ec4a2378a2e9bd5993b54b1711c443"
+    },
+    {
+      "path": "tests/unit/profiles.test.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 74,
+      "sha256": "08452ed4e68b206dc768e6e2394904cd15d603bdd4f400d2eb293017f960bf4d"
+    },
+    {
+      "path": "tests/unit/promptStudio.test.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 62,
+      "sha256": "377c737a532fdb8feea4513575d98f7f6cc873406229ea6ff67889084fa4ff8d"
+    },
+    {
+      "path": "tests/unit/renderRoundtrip.test.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 82,
+      "sha256": "6a98c192aca641021a6d7d8ae9c914195de9f262de7319de09de362eaceba4c4"
+    },
+    {
+      "path": "tests/unit/resolver.test.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 168,
+      "sha256": "9b891aec953a7a81a80f286330a65a30f1010d9e14118e9dda9ce8d2c404be03"
+    },
+    {
+      "path": "tests/unit/signature.test.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 45,
+      "sha256": "9d7bc104b20863ee596a5cf3501c7f6337cacb84139f70fb6c5dee0d50a6ed63"
+    },
+    {
+      "path": "tests/unit/sse.test.ts",
+      "reviewer": "storage-generation",
+      "read": "complete",
+      "lines": 41,
+      "sha256": "69bc1f3b48a67502ee717e5c7b9b27aed94fcaa9df8994b13efd0f7e016a666b"
+    },
+    {
+      "path": "tests/unit/submissions.test.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 68,
+      "sha256": "28cc1f20a4a3986e79ad5741f6cc2a1dd142031c6bcd0bcb7f08976e56959e16"
+    },
+    {
+      "path": "tests/unit/trackerDetect.test.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 90,
+      "sha256": "36a0a43fccabe845836455f04360cf96bdf495550be9d10c9d395e29a0a9a2ec"
+    },
+    {
+      "path": "tests/unit/useFillPlan.test.tsx",
+      "reviewer": "ui",
+      "read": "complete",
+      "lines": 82,
+      "sha256": "6936672606c7c1538248130158cc471ead69b8219dbafb97954b7e3f3d55b472"
+    },
+    {
+      "path": "tests/unit/valueFor.test.ts",
+      "reviewer": "fill",
+      "read": "complete",
+      "lines": 155,
+      "sha256": "8a4950e0e4b7cb8190a8467d738e995e808a45824ca850f427e440648f451110"
+    },
+    {
+      "path": "tsconfig.json",
+      "reviewer": "root",
+      "read": "complete",
+      "lines": 11,
+      "sha256": "33ca605a0333dad7be28ff8986abd938cdf5ff45da3a477f375f425658d7b8e2"
+    },
+    {
+      "path": "vitest.config.ts",
+      "reviewer": "root",
+      "read": "complete",
+      "lines": 12,
+      "sha256": "ae10228728064fd6fccea141c4b1021de14ab1e9e4605bbc974ea8e1a91e4a15"
+    },
+    {
+      "path": "wxt.config.ts",
+      "reviewer": "root",
+      "read": "complete",
+      "lines": 47,
+      "sha256": "795118fd01ba51449941c66dc6cbdf838182853dcc54a1bd38d614c5d9ac3740"
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 # Code audit — September 6, 2026
 
+> Historical provenance correction (September 9, 2026): the short hashes below are not present in this repository. The fixes exist under different hashes; use the verified mapping in [the current review](docs/CODEBASE_REVIEW.md#historical-provenance-correction). Current baseline: Thermo `c73bd2c`, 175 passing tests, Chrome installation still rejected, and two moderate development dependency audit entries. See [the overhaul plan](docs/OVERHAUL_PLAN.md) for proposed repairs and acceptance gates.
+
 Reviewed the application source, entrypoints, configuration, README, and all existing unit tests from baseline `6ba21cc`. Implemented the following thirteen findings in separate commits, each pushed to `bornayo7/jobpilot` on `master`. This is a code and automated-test audit; no real job applications were submitted, paid provider calls made, or live Chrome/ATS flows exercised.
 
 ## Implemented findings

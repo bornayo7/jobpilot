@@ -173,11 +173,15 @@ npm run build   # production build
 
 TypeScript runs in `strict` mode with `noUncheckedIndexedAccess`. Tests cover pure logic, document round-trips, React state transitions, DOM discovery/execution in happy-dom, and backup transactions in fake-indexeddb. Chrome integration and real postings still need browser testing. See [AUDIT.md](AUDIT.md) for the verified findings and prioritized follow-up work.
 
+The [September 9 full codebase review](docs/CODEBASE_REVIEW.md) records the current evidence and remaining defects. The [Thermo overhaul plan](docs/OVERHAUL_PLAN.md) gives the implementation order, acceptance checks and master integration procedure. These documents describe proposed work, not completed fixes.
+
 ---
 
 ## Known limits
 
 Honest list of what isn't done:
+
+- **Current production manifest is rejected by Chrome.** LinkedIn's `/jobs/*` match shares an origin-fallback flag that requires wildcard paths. A successful WXT build does not imply installation succeeds. The proposed declaration split and browser acceptance are the first stage of the overhaul plan.
 
 - **Never verified against a live application portal.** The code has been read carefully and unit-tested; that is not the same as having submitted a real application through it. Treat the first few runs as a test, with the console open.
 - No adapters yet for Workday, iCIMS, or SmartRecruiters — they fall back to heuristics.
