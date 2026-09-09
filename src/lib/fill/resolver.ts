@@ -151,7 +151,11 @@ async function classifyWithModel(
       signature: field.signature,
       entry: { kind, confidence, source: 'llm', model },
     })),
-  );
+  ).catch((error: unknown) => {
+    // Classification succeeded. Optional persistence cannot invalidate that
+    // result or make a completed provider request look like a model failure.
+    console.warn('[jobpilot] mappings are usable but could not be cached', error);
+  });
   return results;
 }
 

@@ -127,6 +127,27 @@ describe('resolveFields', () => {
     expect(outcome.unmatched).toHaveLength(1);
   });
 
+  it('keeps successful model classifications when optional cache persistence fails', async () => {
+    chatMock.mockResolvedValue({
+      text: JSON.stringify({ mappings: [{ i: 0, kind: 'question.freeText', confidence: 0.9 }] }),
+    });
+    const write = vi.spyOn(fakeBrowser.storage.local, 'set').mockRejectedValue(new Error('storage quota'));
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const result = await resolveFields({
+        ...baseInput,
+        fields: [field({ fieldId: 'uncached', signature: 'uncached', label: 'Tell us something unusual' })],
+      });
+      expect(result.rows).toEqual([expect.objectContaining({ kind: 'question.freeText', source: 'llm' })]);
+      expect(result.unmatched).toEqual([]);
+      expect(chatMock).toHaveBeenCalledTimes(1);
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('could not be cached'), expect.any(Error));
+    } finally {
+      write.mockRestore();
+      warning.mockRestore();
+    }
+  });
+
   it('llmEnabled=false skips tier 4 entirely', async () => {
     const outcome = await resolveFields({
       ...baseInput,
