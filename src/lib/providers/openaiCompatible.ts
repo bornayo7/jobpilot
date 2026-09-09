@@ -1,6 +1,28 @@
 import type { ChatOptions, ChatProvider, ChatRequest, ChatResponse, ProviderId } from './types';
 import { ProviderError } from './types';
 import { sseEvents } from './sse';
+import { z } from 'zod';
+
+const Choice = z.object({
+  message: z.object({ content: z.string().nullable().optional(), refusal: z.string().nullable().optional() }).optional(),
+  delta: z.object({ content: z.string().nullable().optional(), refusal: z.string().nullable().optional() }).optional(),
+  finish_reason: z.string().nullable().optional(),
+});
+const Payload = z.object({
+  choices: z.array(Choice).optional(),
+  error: z.object({ message: z.string().optional() }).optional(),
+  usage: z.object({ prompt_tokens: z.number().optional(), completion_tokens: z.number().optional() }).optional(),
+});
+function parsePayload(raw: unknown) {
+  const parsed = Payload.safeParse(raw);
+  if (!parsed.success) throw new ProviderError('Provider returned a malformed response.');
+  if (parsed.data.error) throw new ProviderError(parsed.data.error.message ?? 'Provider request failed.');
+  return parsed.data;
+}
+function checkChoice(choice: z.infer<typeof Choice>) {
+  if (choice.message?.refusal || choice.delta?.refusal) throw new ProviderError('Provider declined this request.');
+  if (choice.finish_reason && choice.finish_reason !== 'stop') throw new ProviderError(`Provider output is incomplete (${choice.finish_reason}).`);
+}
 
 interface CompatConfig {
   id: ProviderId;
@@ -59,26 +81,36 @@ export function openaiCompatibleProvider(config: CompatConfig): ChatProvider {
 
       if (streaming) {
         let text = '';
+        let completed = false;
         for await (const data of sseEvents(res)) {
-          if (data === '[DONE]') break;
-          let event: any;
+          if (data === '[DONE]') { completed = true; break; }
+          let raw: unknown;
           try {
-            event = JSON.parse(data);
+            raw = JSON.parse(data);
           } catch {
-            continue;
+            throw new ProviderError('Provider returned a malformed stream event.');
           }
-          const delta: string | undefined = event.choices?.[0]?.delta?.content;
+          const event = parsePayload(raw);
+          const choice = event.choices?.[0];
+          if (choice) checkChoice(choice);
+          if (choice?.finish_reason === 'stop') completed = true;
+          const delta = choice?.delta?.content;
           if (delta) {
             text += delta;
             opts.onToken?.(delta);
           }
         }
+        if (!completed || !text) throw new ProviderError('Provider stream ended before a complete response.');
         return { text };
       }
 
-      const json: any = await res.json();
+      const json = parsePayload(await res.json());
+      const choice = json.choices?.[0];
+      if (!choice) throw new ProviderError('Provider returned no response choice.');
+      checkChoice(choice);
+      if (typeof choice.message?.content !== 'string' || !choice.message.content.trim()) throw new ProviderError('Provider returned no text output.');
       return {
-        text: json.choices?.[0]?.message?.content ?? '',
+        text: choice.message.content,
         usage: {
           inputTokens: json.usage?.prompt_tokens,
           outputTokens: json.usage?.completion_tokens,

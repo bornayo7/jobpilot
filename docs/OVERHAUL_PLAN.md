@@ -1,6 +1,8 @@
 # JobPilot overhaul and Thermo integration plan
 
-Prepared September 9, 2026 after the [full codebase review](CODEBASE_REVIEW.md). **Proposed, not implemented.** Source baseline: `Thermo` at `c73bd2c`; `master` at `2315bdd`.
+Prepared September 9, 2026 after the [full codebase review](CODEBASE_REVIEW.md). **Approved and being implemented.** Yash approved every stage and new decisions on September 9; teaching is deferred until requested. Source baseline: `Thermo` at `c73bd2c`; `master` at `2315bdd`.
+
+Installation checkpoint `5a9392b` is pushed on Thermo: clean-install typecheck/build, 176 unit tests, two Chromium extension tests, native Chrome 153 packaging, generated-manifest checks and zero dependency advisories pass. GitHub Actions has been added. Stages 2–7 are in progress; final release qualification and master integration remain pending. See [accepted contracts](decisions/0001-application-ownership-and-recovery.md).
 
 ## Outcome
 
@@ -103,7 +105,7 @@ Addresses JP-11, JP-12, JP-13, JP-15.
 
 ### 7. Build the application workbench UI
 
-Depends on the state contracts above. The visual direction is a recommendation pending the requested preference response.
+Depends on the state contracts above. The workbench visual direction is approved with the plan.
 
 - Current job/employer, profile and selected resume appear together above the work. Retain Fill, Generate, Tracker, Answers and Settings; allow compact overflow navigation at narrow widths.
 - Put fields needing review first. Use full-width values, explicit inclusion, and clear warnings. Move raw mapping/source identifiers behind “Correct field mapping.” Ordinary ready fields stay compact.
@@ -176,13 +178,13 @@ The three commit IDs must agree after the push. A fast-forward preserves all exi
 
 4. Verify remote CI against the published source commit. Keep Thermo until the user asks for branch cleanup. If authentication, remote rules or a new competing push blocks integration, preserve the verified commits and report that exact blocker.
 
-## Decisions to settle before source implementation
+## Accepted decisions
 
-Recommended package: preserve the current local-first/copy-paste product, adopt the workbench UI, capture answers as application-only until explicitly promoted (with one-time review of legacy reuse choices), keep ambiguous confirmations out of Applied, and implement all eight stages on Thermo before master integration. Treat persistent per-application drafts as part of the application module where needed for recovery; broader automation and additional ATS coverage require observed fixtures.
+Approved package: preserve the current local-first/copy-paste product, adopt the workbench UI, capture answers as application-only until explicitly promoted (with one-time review of legacy reuse choices), keep ambiguous confirmations out of Applied, and implement all eight stages on Thermo before master integration. Treat persistent per-application drafts as part of the application module where needed for recovery; broader automation and additional ATS coverage require observed fixtures.
 
-The user's instruction asks for the reviewed plan first. Source implementation also requires shared understanding under the invoked [grilling skill](C:/Users/yashb/.codex/skills/grilling/SKILL.md): “Do not act on it until the user confirms you have reached a shared understanding.” The supplied AGENTS instructions separately require double-confirmation before source edits. Routine verified documentation checkpoints are already pre-authorized by the supplied GitHub workflow.
+The full review and plan preceded source implementation. Yash then explicitly authorized implementation of everything in this plan and new decisions. This satisfies the prior shared-understanding and source-edit confirmation gates. Verified commits and pushes follow the standing GitHub workflow.
 
-The teaching mission and visual preference were requested asynchronously. If unanswered, the workbench remains a recommendation and teaching should explain the architecture/verification decisions in this plan. Do not create a learning record claiming the user has mastered something merely because it was explained. No new architectural ADR is marked accepted until the plan's substantive choices are confirmed.
+Teaching is deferred until Yash requests it. No lesson or learning record is created during implementation.
 
 ## Skills used
 
